@@ -1,33 +1,32 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.Sockets;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
-using static System.Net.Mime.MediaTypeNames;
+using System.Xml.Schema;
 
 namespace Concurrency
 {
     internal class Bucket : IDisposable
     {
-        public bool _disposed = false;
-        public string Key { get; private set; }
-        public int Value { get; set; }
-        //public int Hashcode { get; private set; }
-        public Bucket NextBucket { get; set; } = null;
+        private bool _disposed = false;
 
-        public int Length { get; private set; }
-        public int Max { get; private set; }
-        public int Min { get; private set; }
-
-        internal Bucket(string key, int value)
-        {
-            this.Key = key;
-            this.Value = value;
-            //this.Hashcode = hashcode;
-            CalcSuperlatives();
+        public Node[] Nodes { get; private set; } = null;
+        public string[] Keys { get; private set; } = null;
+        public Node FirstNode { get; private set; } = null;
+        public int Length 
+        { 
+            get 
+            {
+                if (FirstNode == null)
+                {
+                    return 0;
+                }
+                return Nodes.Length; 
+            }
         }
+        public int Min { get; private set; } = 0;
+        public int Max { get; private set; } = 0;
 
         ~Bucket()
         {
@@ -37,135 +36,162 @@ namespace Concurrency
         public void Dispose()
         {
             Dispose(true);
+            GC.SuppressFinalize(this);
         }
 
-        public void CalcSuperlatives()
+        public void Recalculate()
         {
-            CalcLength();
-            CalcMax();
-            CalcMin();
-        }
-
-        private void CalcLength()
-        {
-            if (NextBucket == null)
+            if (FirstNode != null)
             {
-                Length = 1;
+                int length = FirstNode.Length;
+                Nodes = new Node[length];
+                Keys = new string[length];
+
+                Min = FirstNode.Value;
+                Max = FirstNode.Value;
+                int i = 0;
+                Node node = FirstNode;
+                while (node != null)
+                {
+                    if (node.Value < Min)
+                    {
+                        Min = node.Value;
+                    }
+                    if (node.Value > Max)
+                    {
+                        Max = node.Value;
+                    }
+                    Nodes[i] = node;
+                    Keys[i] = node.Key;
+                    i++;
+                    node = node.NextNode;
+                }
             }
             else
             {
-                NextBucket.CalcLength();
-                Length = 1 + NextBucket.Length;
+                Nodes = null;
+                Keys = null;
+                Min = 0;
+                Max = 0;
             }
         }
 
-        public void CalcMax()
+        public void Insert(Node newNode, bool recalculate)
         {
-            if (NextBucket == null)
+            Node start = FirstNode;
+            if (start == null)
             {
-                Max = Value;
+                FirstNode = newNode;
             }
             else
             {
-                int otherMax = NextBucket.Max;
-                Max = (otherMax > Value) ? otherMax : Value;
+                if (start.Length > 10)
+                {
+                    int x;
+                    x = 0;
+                }
+
+                int i;
+                for (i = 0; i < Keys.Length; i++)
+                {
+                    int comp = newNode.Key.CompareTo(Keys[i]);
+                    if (comp == 0)
+                    {
+                        Nodes[i].Value = newNode.Value;
+                        break;
+                    }
+                    else if (comp < 0)
+                    {
+                        newNode.NextNode = Nodes[i];
+                        if (i == 0)
+                        {
+                            FirstNode = newNode;
+                        }
+                        else
+                        {
+                            Nodes[i - 1].NextNode = newNode;
+                        }
+                        break;
+                    }
+                }
+                if (i == Keys.Length)
+                {
+                    Nodes[Keys.Length - 1].NextNode = newNode;
+                }
+            }
+
+            if (recalculate)
+            {
+                Recalculate();
             }
         }
 
-        public void CalcMin()
+        public void Delete(string key)
         {
-            if (NextBucket == null)
+            int idx = Array.BinarySearch<string>(Keys, key);
+            if (idx < 0)
             {
-                Min = Value;
+                throw new KeyNotFoundException($"Key \"{key}\" could not be found in the dictionary");
+            }
+
+            if (idx == 0)
+            {
+                Node node = FirstNode.NextNode;
+                FirstNode.NextNode = null;
+                FirstNode.Dispose();
+                FirstNode = node;
             }
             else
             {
-                int otherMin = NextBucket.Min;
-                Min = (otherMin < Value) ? otherMin : Value;
+                Node node = Nodes[idx];
+                Nodes[idx - 1].NextNode = node.NextNode;
+                node.NextNode = null;
+                node.Dispose();
+                node = null;
             }
-        }
 
-
-        public Bucket Insert(Bucket bucket)
-        {
-            int comp = Key.CompareTo(bucket.Key);
-            if (comp == 0)
-            {
-                Value = bucket.Value;
-                //Interlocked.Increment(ref collisionCnt);
-                return this;
-            }
-            else if (comp > 0)
-            {
-                bucket.NextBucket = this;
-                return bucket;
-            }
-            else if (NextBucket == null)
-            {
-                NextBucket = bucket;
-            }
-            else
-            {
-                NextBucket = NextBucket.Insert(bucket);
-            }
-            return this;
-        }
-
-        public Bucket Delete(string key)
-        {
-            int comp = Key.CompareTo(key);
-            if (comp == 0)
-            {
-                return NextBucket;
-            }
-            else if (comp > 0 || NextBucket == null)
-            {
-                throw new KeyNotFoundException(key);
-            }
-            NextBucket = NextBucket.Delete(key);
-            return this;
+            Recalculate();
         }
 
         public int Search(string key)
         {
-            int comp = Key.CompareTo(key);
-            if (comp == 0)
-            {
-                return Value;
-            }
-            else if (comp > 0 || NextBucket == null)
+            if (FirstNode == null)
             {
                 throw new KeyNotFoundException(key);
             }
-            return NextBucket.Search(key);
-        }
 
-        //public int Search(string key)
-        //{
-        //    int comp = Key.CompareTo(key);
-        //    if (comp == 0)
-        //    {
-        //        return Value;
-        //    }
-        //    else if (comp > 0 || NextBucket == null)
-        //    {
-        //        throw new KeyNotFoundException(key);
-        //    }
-        //    return NextBucket.Search(key);
-        //}
+            int idx = Array.BinarySearch<string>(Keys, key);
+            if (idx < 0)
+            {
+                throw new KeyNotFoundException(key);
+            }
+
+            return Nodes[idx].Value;
+        }
 
         private void Dispose(bool disposing)
         {
-            if (!_disposed) 
+            if (!_disposed)
             {
                 if (disposing) 
                 {
-                }
-                if (NextBucket != null)
-                {
-                    NextBucket.Dispose();
-                    NextBucket = null;
-                    Key = null;
+                    if (Nodes != null)
+                    {
+                        for (int i = 0; i < Nodes.Length; i++)
+                        {
+                            Nodes[i] = null;
+                            Keys[i] = null;
+                        }
+
+                        Nodes = null;
+                        Keys = null;
+                    }
+
+                    if (FirstNode != null)
+                    {
+                        FirstNode.Dispose();
+                        FirstNode = null;
+                    }
                 }
                 _disposed = true;
             }
