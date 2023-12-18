@@ -10,17 +10,25 @@ namespace Concurrency
 {
     public class ConcurrentDictionary : IDisposable
     {
-        private const int DEFAULT_ARRAY_SIZE = 2048;
+        private const int DEFAULT_INITIAL_SIZE = 40960;
         private const int DEFAULT_LOCKS = 128;
 
         private object[] _locks = new object[DEFAULT_LOCKS];
-        private Bucket[] _buckets = new Bucket[DEFAULT_ARRAY_SIZE];
+        private Bucket[] _buckets = null;
         private IEqualityComparer<string> _comparer = EqualityComparer<string>.Default;
         //private LockPool _lockPool = new LockPool(DEFAULT_LOCKS);
         private bool _disposed = false;
 
         public ConcurrentDictionary()
+            : this(DEFAULT_INITIAL_SIZE)
         {
+        }
+
+        public ConcurrentDictionary(int initialSize)
+        {
+            int arraySize = initialSize / 20;
+            _buckets = new Bucket[arraySize];
+
             for (int i = 0; i < _locks.Length; i++)
             {
                 _locks[i] = new object();
@@ -36,6 +44,29 @@ namespace Concurrency
         {
             Dispose(true);
         }
+
+        public string SearchValue(bool first, bool last)
+        {
+            int fifth = _buckets.Length / 5;
+            Bucket bucket = _buckets[fifth];
+            if (first)
+            {
+                return bucket.Key;
+            }
+            else if (last)
+            {
+                return GetEndBucket(bucket).Key;
+            }
+
+            int length = bucket.Length;
+            int midPt = length / 2;
+            for (int i = 0; i < midPt; i++)
+            {
+                bucket = bucket.NextBucket;
+            }
+            return bucket.Key;
+        }
+
 
         public void Insert(string key, int value)
         {
@@ -53,9 +84,97 @@ namespace Concurrency
                     throw new KeyNotFoundException(key);
                 }
                 _buckets[hash] = bucket.Delete(key);
-                _buckets[hash].CalcLength();
+                _buckets[hash].CalcSuperlatives();
             }
         }
+
+        private Bucket[] MakeBucketArray(Bucket start)
+        {
+            Bucket[] buckets = new Bucket[start.Length];
+            Bucket bucket = start;
+            for (int i = 0; i < buckets.Length; i++)
+            {
+                buckets[i] = bucket;
+                bucket = bucket.NextBucket;
+                if (bucket == null)
+                {
+                    break;
+                }
+            }
+            return buckets;
+        }
+
+        private string[] MakeKeyArray(Bucket[] buckets)
+        {
+            string[] keys = new string[buckets.Length];
+            for (int i = 0; i < keys.Length; i++)
+            {
+                if (buckets[i] != null)
+                {
+                    keys[i] = buckets[i].Key;
+                }
+            }
+
+            return keys;
+        }
+
+        public int Search(string key)
+        {
+            int hash = GetBucketHash(key);
+            lock (_locks[GetLockHash(hash)])
+            {
+                Bucket start = _buckets[hash];
+                if (start == null)
+                {
+                    throw new KeyNotFoundException(key);
+                }
+                Bucket[] buckets = new Bucket[start.Length];
+                string[] keys = new string[start.Length];
+
+                Bucket bucket = start;
+                for (int i = 0; i < buckets.Length; i++)
+                {
+                    buckets[i] = bucket;
+                    keys[i] = bucket.Key;
+                    bucket = bucket.NextBucket;
+                    if (bucket == null)
+                    {
+                        break;
+                    }
+                }
+
+
+                int idx = Array.BinarySearch<string>(keys, key);
+                if (idx < 0)
+                {
+                    throw new KeyNotFoundException(key);
+                }
+
+                return buckets[idx].Value;
+            }
+        }
+
+        //public int Search(string key)
+        //{
+        //    int hash = GetBucketHash(key);
+        //    lock (_locks[GetLockHash(hash)])
+        //    {
+        //        Bucket start = _buckets[hash];
+        //        if (start == null)
+        //        {
+        //            throw new KeyNotFoundException(key);
+        //        }
+        //        Bucket end = GetEndBucket(start);
+        //        Bucket match = FindMidPointBucket(start, end, key);
+
+        //        if (match == null)
+        //        {
+        //            throw new KeyNotFoundException(key);
+        //        }
+
+        //        return match.Value;
+        //    }
+        //}
 
         //public int Search(string key)
         //{
@@ -71,24 +190,24 @@ namespace Concurrency
         //    }
         //}
 
-        public int Search(string key)
-        {
-            int hash = GetBucketHash(key);
-            lock (_locks[GetLockHash(hash)])
-            {
-                Bucket start = _buckets[hash];
-                if (start == null)
-                {
-                    throw new KeyNotFoundException(key);
-                }
-                Dictionary<string, Bucket> dict = CreateDict(start);
-                if (dict.TryGetValue(key, out Bucket found))
-                {
-                    return found.Value;
-                }
-                throw new KeyNotFoundException(key);
-            }
-        }
+        //public int Search(string key)
+        //{
+        //    int hash = GetBucketHash(key);
+        //    lock (_locks[GetLockHash(hash)])
+        //    {
+        //        Bucket start = _buckets[hash];
+        //        if (start == null)
+        //        {
+        //            throw new KeyNotFoundException(key);
+        //        }
+        //        Dictionary<string, Bucket> dict = CreateDict(start);
+        //        if (dict.TryGetValue(key, out Bucket found))
+        //        {
+        //            return found.Value;
+        //        }
+        //        throw new KeyNotFoundException(key);
+        //    }
+        //}
 
         private Dictionary<string, Bucket> CreateDict(Bucket bucket)
         {
@@ -127,9 +246,10 @@ namespace Concurrency
                 {
                     if (_buckets[i] != null)
                     {
-                        if (max < _buckets[i].Max)
+                        int newMax = _buckets[i].Max;
+                        if (max < newMax)
                         {
-                            max = _buckets[i].Max;
+                            max = newMax;
                         }
                     }
                 }
@@ -146,9 +266,10 @@ namespace Concurrency
                 {
                     if (_buckets[i] != null)
                     {
-                        if (min > _buckets[i].Max)
+                        int newMin = _buckets[i].Min;
+                        if (min > newMin)
                         {
-                            min = _buckets[i].Max;
+                            min = newMin;
                         }
                     }
                 }
@@ -158,7 +279,7 @@ namespace Concurrency
 
         public static ConcurrentDictionary Build(List<Tuple<string, int>> input)
         {
-            ConcurrentDictionary dict = new ConcurrentDictionary();
+            ConcurrentDictionary dict = new ConcurrentDictionary(input.Count);
 
             if (input == null)
             {
@@ -174,7 +295,7 @@ namespace Concurrency
             {
                 if (b != null)
                 {
-                    b.CalcLength();
+                    b.CalcSuperlatives();
                 }
             }
 
@@ -201,22 +322,97 @@ namespace Concurrency
             }
         }
 
-        private void Insert(int hash, Bucket bucket, bool calcLength)
+        private void Insert(int hash, Bucket newBucket, bool calcSuperlatives)
         {
-            Bucket current = _buckets[hash];
-            if (current == null)
+            Bucket start = _buckets[hash];
+            if (start == null)
             {
-                _buckets[hash] = bucket;
+                _buckets[hash] = newBucket;
             }
             else
             {
-                _buckets[hash] = current.Insert(bucket);
+                Bucket[] buckets = new Bucket[start.Length];
+                string[] keys = new string[start.Length];
+
+                Bucket bucket = start;
+                for (int i = 0; i < buckets.Length; i++)
+                {
+                    buckets[i] = bucket;
+                    keys[i] = bucket.Key;
+                    bucket = bucket.NextBucket;
+                    if (bucket == null)
+                    {
+                        break;
+                    }
+                }
+
+                if (start.Length > 10)
+                {
+                    int x;
+                    x = 0;
+                }
+
+
+                int idx = Array.BinarySearch<string>(keys, newBucket.Key);
+                if (idx >= 0)
+                {
+                    buckets[idx].Value = newBucket.Value;
+                }
+                else 
+                {
+                    int i;
+                    for (i = 0; i < keys.Length; i++)
+                    {
+                        int comp = newBucket.Key.CompareTo(keys[i]);
+                        if (comp == 0)
+                        {
+                            throw new Exception("Oops");
+                        }
+                        else if (comp < 0)
+                        {
+                            newBucket.NextBucket = buckets[i];
+                            if (i == 0)
+                            {
+                                _buckets[hash] = newBucket;
+                            }
+                            else
+                            {
+                                buckets[i - 1].NextBucket = newBucket;
+                            }
+                            break;
+                        }
+                    }
+                    if (i == keys.Length)
+                    {
+                        buckets[keys.Length - 1].NextBucket = newBucket;
+                    }
+                }
+
+                if (calcSuperlatives)
+                {
+                    _buckets[hash].CalcSuperlatives();
+                }
+
             }
-            if (calcLength)
-            {
-                _buckets[hash].CalcLength();
-            }
+
         }
+
+        //private void Insert(int hash, Bucket newBucket, bool calcLength)
+        //{
+        //    Bucket start = _buckets[hash];
+        //    if (start == null)
+        //    {
+        //        _buckets[hash] = newBucket;
+        //    }
+        //    else
+        //    {
+        //        _buckets[hash] = start.Insert(newBucket);
+        //    }
+        //    if (calcLength)
+        //    {
+        //        _buckets[hash].CalcLength();
+        //    }
+        //}
 
         private int GetBucketHash(string key)
         {
@@ -231,20 +427,159 @@ namespace Concurrency
             return bucketHash % _locks.Length;
         }
 
-        private Bucket FindMidPointBucket(Bucket start, int midPt)
+        private Bucket FindMidPointBucket(Bucket start, Bucket end, string key)
+        {
+            if (start == null && end == null)
+            {
+                throw new ArgumentNullException("start and end");
+            }
+            else if (start == null)
+            {
+                if (end.Key.CompareTo(key) == 0)
+                {
+                    return end;
+                }
+                return null;
+            }
+            else if (end == null)
+            {
+                if (start.Key.CompareTo(key) == 0)
+                {
+                    return start;
+                }
+                return null;
+            }
+
+            int length = GetBucketLength(start, end);
+            int midPt = length / 2;
+
+            Bucket midBucket = start;
+            for (int i = 0; i < midPt; i++)
+            {
+                midBucket = midBucket.NextBucket;
+            }
+
+            int comp = midBucket.Key.CompareTo(key);
+            if (comp == 0)
+            {
+                return midBucket;
+            }
+            else if (comp < 0)
+            {
+                if (Bucket.ReferenceEquals(start, midBucket))
+                {
+                    return FindMidPointBucket(null, end, key);
+                }
+                return FindMidPointBucket(midBucket, end, key);
+            }
+            else
+            {
+                if (Bucket.ReferenceEquals(end, midBucket))
+                {
+                    return FindMidPointBucket(start, null, key);
+                }
+                return FindMidPointBucket(start, midBucket, key);
+            }
+
+            return midBucket;
+        }
+
+        //private Bucket FindMidPointBucket(Bucket start, Bucket end, string key)
+        //{
+        //    if (start == null && end == null)
+        //    {
+        //        throw new ArgumentNullException("start and end");
+        //    }
+        //    else if (start == null)
+        //    {
+        //        if (end.Key.CompareTo(key) == 0)
+        //        {
+        //            return end;
+        //        }
+        //        return null;
+        //    }
+        //    else if (end == null)
+        //    {
+        //        if (start.Key.CompareTo(key) == 0)
+        //        {
+        //            return start;
+        //        }
+        //        return null;
+        //    }
+
+        //    int length = GetBucketLength(start, end);
+        //    int midPt = length / 2;
+
+        //    Bucket midBucket = start;
+        //    for (int i = 0; i < midPt; i++)
+        //    {
+        //        midBucket = midBucket.NextBucket;
+        //    }
+
+        //    int comp = midBucket.Key.CompareTo(key); 
+        //    if (comp == 0)
+        //    {
+        //        return midBucket;
+        //    }
+        //    else if (comp < 0)
+        //    {
+        //        if (Bucket.ReferenceEquals(start, midBucket))
+        //        {
+        //            return FindMidPointBucket(null, end, key);
+        //        }
+        //        return FindMidPointBucket(midBucket, end, key);
+        //    }
+        //    else
+        //    {
+        //        if (Bucket.ReferenceEquals(end, midBucket))
+        //        {
+        //            return FindMidPointBucket(start, null, key);
+        //        }
+        //        return FindMidPointBucket(start, midBucket, key);
+        //    }
+
+        //    return midBucket;
+        //}
+
+        private int GetBucketLength(Bucket start, Bucket end)
+        {
+            if (start == null)
+            {
+                throw new ArgumentNullException("start");
+            }
+            if (end == null)
+            {
+                throw new ArgumentNullException("end");
+            }
+
+            int length = 1;
+            Bucket bucket = start;
+            while (bucket != null && !Bucket.ReferenceEquals(bucket, end))
+            {
+                if (bucket.NextBucket == null)
+                {
+                    break;
+                }
+                length++;
+                bucket = bucket.NextBucket;
+            }
+
+            return length;
+        }
+
+        private Bucket GetEndBucket(Bucket start)
         {
             if (start == null)
             {
                 throw new ArgumentNullException("start");
             }
 
-            Bucket midBucket = start;
-            for (int i = 0; i < midPt; i++)
+            Bucket end = start;
+            while (end.NextBucket != null)
             {
-                midBucket = start.NextBucket;
+                end = end.NextBucket;
             }
-
-            return midBucket;
+            return end;
         }
 
         private void Dispose(bool disposing)

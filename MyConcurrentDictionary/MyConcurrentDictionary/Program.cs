@@ -12,13 +12,13 @@ namespace MyConcurrentDictionary
 {
     internal class Program
     {
-        private static int THREAD_COUNT = 10;
-        private static int TOTAL_INSERTS = 5000000;
+        private static int THREAD_COUNT = 20;
+        private static int TOTAL_INSERTS = 15000000;
         private static int LOOP_COUNT = TOTAL_INSERTS / THREAD_COUNT;
         private static int STRING_LENGTH = 20;
 
         private static Concurrency.ConcurrentDictionary Dict = null;
-        private static System.Collections.Concurrent.ConcurrentDictionary<string, int> Dict2 = new System.Collections.Concurrent.ConcurrentDictionary<string, int>();
+        //private static System.Collections.Concurrent.ConcurrentDictionary<string, int> Dict2 = new System.Collections.Concurrent.ConcurrentDictionary<string, int>();
         private static string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz 0123456789";
 
         private static ConcurrentBag<double> insertTimes = new ConcurrentBag<double>();
@@ -30,7 +30,7 @@ namespace MyConcurrentDictionary
             {
                 //for (int i = 10; i > 0; i--)
                 //{
-                //    using (Dict = new Concurrency.ConcurrentDictionary())
+                //    using (Dict = new Concurrency.ConcurrentDictionary(TOTAL_INSERTS))
                 //    {
                 //        TOTAL_INSERTS = 100000 * i;
                 //        LOOP_COUNT = TOTAL_INSERTS / THREAD_COUNT;
@@ -39,7 +39,7 @@ namespace MyConcurrentDictionary
                 //}
 
 
-                using (Dict = new Concurrency.ConcurrentDictionary())
+                using (Dict = new Concurrency.ConcurrentDictionary(TOTAL_INSERTS))
                 {
                     InsertTest();
                 }
@@ -92,7 +92,23 @@ namespace MyConcurrentDictionary
             //    Dict.Insert(repeatStr, rnd.Next(int.MinValue, int.MaxValue));
             //}
 
+            // not found
+            //string scrambleStr = new string(chars.ToCharArray().OrderBy(x => Guid.NewGuid()).ToArray());
+            //Random rnd = new Random();
+            //string key = RandomString(scrambleStr, STRING_LENGTH, rnd);
+            ////int val1 = Dict.Search(key);
 
+            //// first
+            //key = Dict.SearchValue(true, false);
+            //int val2 = Dict.Search(key);
+
+            ////// last
+            //key = Dict.SearchValue(false, true);
+            //int val3 = Dict.Search(key);
+
+            //// middle
+            //key = Dict.SearchValue(false, false);
+            //int val4 = Dict.Search(key);
 
             Stopwatch sw2 = new Stopwatch();
             sw2.Start();
@@ -115,11 +131,7 @@ namespace MyConcurrentDictionary
 
             Console.WriteLine($"Threads:            {threads.Length}");
             Console.WriteLine($"Total Inserts:      {TOTAL_INSERTS},         seconds: {(double)sw.ElapsedTicks / 10000000}");
-            Console.WriteLine($"Avg Insert seconds: {insertTimes.Average()}");
-            Console.WriteLine($"Min Insert seconds: {insertTimes.Min()}");
             Console.WriteLine($"Max Insert seconds: {insertTimes.Max()}");
-            Console.WriteLine($"Avg Search seconds: {searchTimes.Average()}");
-            Console.WriteLine($"Min Search seconds: {searchTimes.Min()}");
             Console.WriteLine($"Max Search seconds: {searchTimes.Max()}");
             Console.WriteLine($"Size:               {count},         seconds: {(double)sw2.ElapsedTicks / 10000000}");
             Console.WriteLine($"Min:                {min},   seconds: {(double)sw3.ElapsedTicks / 10000000}");
@@ -182,19 +194,28 @@ namespace MyConcurrentDictionary
 
         private static void Insert()
         {
+            List<string> keys = new List<string>();
             string scrambleStr = new string(chars.ToCharArray().OrderBy(x => Guid.NewGuid()).ToArray());
             Random rnd = new Random();
             for (int i = 0; i < LOOP_COUNT; i++)
             {
                 string key = RandomString(scrambleStr, STRING_LENGTH, rnd);
                 int val = rnd.Next(int.MinValue, int.MaxValue);
+                if (i % 20 == 0)
+                {
+                    keys.Add(key);
+                }
 
                 Stopwatch sw = new Stopwatch();
                 sw.Start();
                 Dict.Insert(key, val);
                 sw.Stop();
                 insertTimes.Add((double)sw.ElapsedTicks / 10000000);
+            }
 
+            foreach (string key in keys)
+            {
+                Stopwatch sw = new Stopwatch();
                 sw.Restart();
                 int val2 = Dict.Search(key);
                 sw.Stop();

@@ -18,37 +18,15 @@ namespace Concurrency
         public Bucket NextBucket { get; set; } = null;
 
         public int Length { get; private set; }
-
-        public int Max
-        {
-            get 
-            {
-                if (NextBucket == null)
-                {
-                    return Value;
-                }
-                return (Value >= NextBucket.Value) ? Value : NextBucket.Value;
-            }
-        }
-
-        public int Min
-        {
-            get
-            {
-                if (NextBucket == null)
-                {
-                    return Value;
-                }
-                return (Value <= NextBucket.Value) ? Value : NextBucket.Value;
-            }
-        }
+        public int Max { get; private set; }
+        public int Min { get; private set; }
 
         internal Bucket(string key, int value)
         {
             this.Key = key;
             this.Value = value;
             //this.Hashcode = hashcode;
-            CalcLength();
+            CalcSuperlatives();
         }
 
         ~Bucket()
@@ -61,7 +39,14 @@ namespace Concurrency
             Dispose(true);
         }
 
-        public void CalcLength()
+        public void CalcSuperlatives()
+        {
+            CalcLength();
+            CalcMax();
+            CalcMin();
+        }
+
+        private void CalcLength()
         {
             if (NextBucket == null)
             {
@@ -72,8 +57,34 @@ namespace Concurrency
                 NextBucket.CalcLength();
                 Length = 1 + NextBucket.Length;
             }
-            //Length = (NextNode == null) ? 1 : 1 + NextNode.Length;
         }
+
+        public void CalcMax()
+        {
+            if (NextBucket == null)
+            {
+                Max = Value;
+            }
+            else
+            {
+                int otherMax = NextBucket.Max;
+                Max = (otherMax > Value) ? otherMax : Value;
+            }
+        }
+
+        public void CalcMin()
+        {
+            if (NextBucket == null)
+            {
+                Min = Value;
+            }
+            else
+            {
+                int otherMin = NextBucket.Min;
+                Min = (otherMin < Value) ? otherMin : Value;
+            }
+        }
+
 
         public Bucket Insert(Bucket bucket)
         {
@@ -128,6 +139,20 @@ namespace Concurrency
             }
             return NextBucket.Search(key);
         }
+
+        //public int Search(string key)
+        //{
+        //    int comp = Key.CompareTo(key);
+        //    if (comp == 0)
+        //    {
+        //        return Value;
+        //    }
+        //    else if (comp > 0 || NextBucket == null)
+        //    {
+        //        throw new KeyNotFoundException(key);
+        //    }
+        //    return NextBucket.Search(key);
+        //}
 
         private void Dispose(bool disposing)
         {
