@@ -266,7 +266,7 @@ namespace MyConcurrentDictionary
                         sw.WriteLine($"Start Time: {DateTime.Now}");
                         sw.WriteLine();
                         sw.WriteLine();
-                        sw.WriteLine(",Inserts,,,Search,,,Size,Min,Max,,Running Time");
+                        sw.WriteLine(",Inserts,,,Search,,,Size,Min,Max,,Run Time");
                     }
                 }
             }
