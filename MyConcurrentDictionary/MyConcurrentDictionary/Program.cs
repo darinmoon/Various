@@ -7,15 +7,18 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Concurrent;
 using Concurrency;
+using System.IO;
 
 namespace MyConcurrentDictionary
 {
     internal class Program
     {
-        private static int THREAD_COUNT = 20;
-        private static int TOTAL_INSERTS = 15000000;
+        private static int THREAD_COUNT = 10;
+        private static int TOTAL_INSERTS = 10000000;
         private static int LOOP_COUNT = TOTAL_INSERTS / THREAD_COUNT;
         private static int STRING_LENGTH = 20;
+
+        private static string fileName = string.Empty;
 
         private static Concurrency.ConcurrentDictionary Dict = null;
         //private static System.Collections.Concurrent.ConcurrentDictionary<string, int> Dict2 = new System.Collections.Concurrent.ConcurrentDictionary<string, int>();
@@ -26,6 +29,24 @@ namespace MyConcurrentDictionary
 
         static void Main(string[] args)
         {
+            if (args.Length > 0)
+            {
+                for (int i = 0; i < args.Length; i++) 
+                {
+                    switch (i)
+                    {
+                        case 0:
+                            TOTAL_INSERTS = Int32.Parse(args[i]);
+                            LOOP_COUNT = TOTAL_INSERTS / THREAD_COUNT;
+                            break;
+                        case 1:
+                            fileName = args[i];
+                            CreateFile();
+                            break;
+                    }
+                }
+            }
+
             try
             {
                 //for (int i = 10; i > 0; i--)
@@ -129,15 +150,29 @@ namespace MyConcurrentDictionary
             //Dict.Delete(test);
             //count = Dict.Size();
 
+            double maxInsert = insertTimes.Max();
+            double maxSearch = searchTimes.Max();
+            double size = (double)sw2.ElapsedTicks / 10000000;
+            double minTime = (double)sw3.ElapsedTicks / 10000000;
+            double maxTime = (double)sw4.ElapsedTicks / 10000000;
+
             Console.WriteLine($"Threads:            {threads.Length}");
             Console.WriteLine($"Total Inserts:      {TOTAL_INSERTS},         seconds: {(double)sw.ElapsedTicks / 10000000}");
-            Console.WriteLine($"Max Insert seconds: {insertTimes.Max()}");
-            Console.WriteLine($"Max Search seconds: {searchTimes.Max()}");
-            Console.WriteLine($"Size:               {count},         seconds: {(double)sw2.ElapsedTicks / 10000000}");
-            Console.WriteLine($"Min:                {min},   seconds: {(double)sw3.ElapsedTicks / 10000000}");
-            Console.WriteLine($"Max:                {max},    seconds: {(double)sw4.ElapsedTicks / 10000000}");
+            Console.WriteLine($"Max Insert seconds: {maxInsert}");
+            Console.WriteLine($"Max Search seconds: {maxSearch}");
+            Console.WriteLine($"Size:               {count},         seconds: {size}");
+            Console.WriteLine($"Min:                {min},   seconds: {minTime}");
+            Console.WriteLine($"Max:                {max},    seconds: {maxTime}");
             Console.WriteLine();
             Console.WriteLine();
+
+            if (!String.IsNullOrEmpty(fileName))
+            {
+                using (StreamWriter writer = File.AppendText(fileName))
+                {
+                    writer.WriteLine($"{TOTAL_INSERTS},{maxInsert},,{TOTAL_INSERTS},{maxSearch},,{TOTAL_INSERTS},{size},{minTime},{maxTime}");
+                }
+            }
 
             count = 0;
         }
@@ -233,6 +268,26 @@ namespace MyConcurrentDictionary
                 list.Add(new Tuple<string, int>(RandomString(scrambleStr, STRING_LENGTH, rnd), rnd.Next(int.MinValue, int.MaxValue)));
             }
             return list;
+        }
+
+        private static void CreateFile()
+        {
+            if (!String.IsNullOrEmpty(fileName))
+            {
+                if (!File.Exists(fileName))
+                {
+                    using (StreamWriter sw = new StreamWriter(fileName))
+                    {
+                        sw.WriteLine($"Thread Count:  {THREAD_COUNT}");
+                        sw.WriteLine($"Total Inserts: {TOTAL_INSERTS}");
+                        sw.WriteLine($"Loop Count:    {LOOP_COUNT}");
+                        sw.WriteLine($"String Length: {STRING_LENGTH}");
+                        sw.WriteLine();
+                        sw.WriteLine();
+                        sw.WriteLine(",Inserts,,,Search,,,Size,Min,Max");
+                    }
+                }
+            }
         }
     }
 }

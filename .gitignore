@@ -1,0 +1,6 @@
+*.csproj.user
+
+bin/
+obj/
+FileContentIndex/
+.vs/
