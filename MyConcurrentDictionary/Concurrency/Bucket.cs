@@ -76,7 +76,7 @@ namespace Concurrency
             }
         }
 
-        public void Insert(Node newNode, bool recalculate)
+        public void Insert(Node newNode)
         {
             Node start = FirstNode;
             if (start == null)
@@ -85,45 +85,32 @@ namespace Concurrency
             }
             else
             {
-                if (start.Length > 10)
+                int idx = BinarySearch(Keys, newNode.Key);
+                if (idx >= 0)
                 {
-                    int x;
-                    x = 0;
+                    Nodes[idx].Value = newNode.Value;
                 }
-
-                int i;
-                for (i = 0; i < Keys.Length; i++)
+                else
                 {
-                    int comp = newNode.Key.CompareTo(Keys[i]);
-                    if (comp == 0)
+                    int insertIdx = Math.Abs(idx + 1);
+                    if (insertIdx == 0)
                     {
-                        Nodes[i].Value = newNode.Value;
-                        break;
+                        newNode.NextNode = FirstNode;
+                        FirstNode = newNode;
                     }
-                    else if (comp < 0)
+                    else if (insertIdx == Keys.Length)
                     {
-                        newNode.NextNode = Nodes[i];
-                        if (i == 0)
-                        {
-                            FirstNode = newNode;
-                        }
-                        else
-                        {
-                            Nodes[i - 1].NextNode = newNode;
-                        }
-                        break;
+                        Nodes[Nodes.Length - 1].NextNode = newNode;
                     }
-                }
-                if (i == Keys.Length)
-                {
-                    Nodes[Keys.Length - 1].NextNode = newNode;
+                    else
+                    {
+                        Nodes[insertIdx - 1].NextNode = newNode;
+                        newNode.NextNode = Nodes[insertIdx];
+                    }
                 }
             }
 
-            if (recalculate)
-            {
-                Recalculate();
-            }
+            Recalculate();
         }
 
         public void Delete(string key)
@@ -195,6 +182,32 @@ namespace Concurrency
                 }
                 _disposed = true;
             }
+        }
+
+        private static int BinarySearch(string[] a, string key)
+        {
+            return BinarySearch(a, 0, a.Length, key);
+        }
+
+        private static int BinarySearch(string[] a, int fromIndex, int toIndex, string key)
+        {
+            int low = fromIndex;
+            int high = toIndex - 1;
+
+            while (low <= high)
+            {
+                int mid = (int)((uint)(low + high) >> 1);
+                string midVal = a[mid];
+
+                int comp = midVal.CompareTo(key);
+                if (comp < 0)
+                    low = mid + 1;
+                else if (comp > 0)
+                    high = mid - 1;
+                else
+                    return mid; // key found
+            }
+            return -(low + 1);  // key not found.
         }
     }
 }

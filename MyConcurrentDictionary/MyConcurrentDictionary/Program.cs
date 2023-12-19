@@ -8,13 +8,14 @@ using System.Threading.Tasks;
 using System.Collections.Concurrent;
 using Concurrency;
 using System.IO;
+using System.Runtime.InteropServices;
 
 namespace MyConcurrentDictionary
 {
     internal class Program
     {
-        private static int THREAD_COUNT = 10;
-        private static int TOTAL_INSERTS = 100000;
+        private static int THREAD_COUNT = 1;
+        private static int TOTAL_INSERTS = 3000000;
         private static int LOOP_COUNT = TOTAL_INSERTS / THREAD_COUNT;
         private static int STRING_LENGTH = 20;
 
@@ -25,9 +26,12 @@ namespace MyConcurrentDictionary
 
         private static ConcurrentBag<double> insertTimes = new ConcurrentBag<double>();
         private static ConcurrentBag<double> searchTimes = new ConcurrentBag<double>();
+        private static ConcurrentBag<double> deleteTimes = new ConcurrentBag<double>();
 
         static void Main(string[] args)
         {
+            bool bInserts = true;
+
             if (args.Length > 0)
             {
                 for (int i = 0; i < args.Length; i++) 
@@ -35,12 +39,17 @@ namespace MyConcurrentDictionary
                     switch (i)
                     {
                         case 0:
+                            if (args[i].ToLower().CompareTo("build") == 0)
+                            {
+                                bInserts = false;
+                            }
+                            break;
+                        case 1:
                             TOTAL_INSERTS = Int32.Parse(args[i]);
                             LOOP_COUNT = TOTAL_INSERTS / THREAD_COUNT;
                             break;
-                        case 1:
+                        case 2:
                             fileName = args[i];
-                            CreateFile();
                             break;
                     }
                 }
@@ -48,32 +57,48 @@ namespace MyConcurrentDictionary
 
             try
             {
-                using (Dict = new Concurrency.ConcurrentDictionary()) // TOTAL_INSERTS))
+                if (bInserts)
                 {
-                    InsertTest();
+                    using (Dict = new Concurrency.ConcurrentDictionary())
+                    {
+                        InsertTest();
+                    }
+                    Dict = null;
                 }
-                Dict = null;
-
-                //BuildTest();
-
-                int x;
-                x = 0;
+                else
+                {
+                    BuildTest();
+                }
             }
             catch (Exception ex)
             {
-                int x;
-                x = 0;
+                Console.WriteLine(ex.ToString());
             }
         }
 
         private static void InsertTest()
         {
+            if (!String.IsNullOrEmpty(fileName))
+            {
+                if (!File.Exists(fileName))
+                {
+                    using (StreamWriter writer = new StreamWriter(fileName))
+                    {
+                        writer.WriteLine($"Thread Count:  {THREAD_COUNT}");
+                        writer.WriteLine($"String Length: {STRING_LENGTH}");
+                        writer.WriteLine($"Start Time: {DateTime.Now}");
+                        writer.WriteLine();
+                        writer.WriteLine();
+                        writer.WriteLine(",Inserts,,,Search,,,Size,Min,Max,,Run Time");
+                    }
+                }
+            }
+
             Console.WriteLine("===================================================================================");
             Console.WriteLine("================================ Insert Test ======================================");
             Console.WriteLine("===================================================================================");
 
-            Stopwatch sw = new Stopwatch();
-            sw.Start();
+            Stopwatch sw = Stopwatch.StartNew();
             Thread[] threads = new Thread[THREAD_COUNT];
             for (int i = 0; i < threads.Length; i++)
             {
@@ -95,44 +120,15 @@ namespace MyConcurrentDictionary
 
             sw.Stop();
 
-            // not found
-            string scrambleStr = new string(chars.ToCharArray().OrderBy(x => Guid.NewGuid()).ToArray());
-            Random rnd = new Random();
-            string key = RandomString(scrambleStr, STRING_LENGTH, rnd);
-            //int val1 = Dict.Search(key);
-
-            // first
-            //key = Dict.SearchValue(true, false);
-            //int val2 = Dict.Search(key);
-
-            //// last
-            //key = Dict.SearchValue(false, true);
-            //int val3 = Dict.Search(key);
-
-            // middle
-            //key = Dict.SearchValue(false, false);
-            //int val4 = Dict.Search(key);
-
-            //key = Dict.SearchValue(false, false);
-            //Dict.Delete(key);
-            //key = Dict.SearchValue(false, true);
-            //Dict.Delete(key);
-            //key = Dict.SearchValue(true, false);
-            //Dict.Delete(key);
-            //count = Dict.Size();
-
-            Stopwatch sw2 = new Stopwatch();
-            sw2.Start();
+            Stopwatch sw2 = Stopwatch.StartNew();
             int count = Dict.Size();
             sw2.Stop();
 
-            Stopwatch sw3 = new Stopwatch();
-            sw3.Start();
+            Stopwatch sw3 = Stopwatch.StartNew();
             int min = Dict.Min();
             sw3.Stop();
 
-            Stopwatch sw4 = new Stopwatch();
-            sw4.Start();
+            Stopwatch sw4 = Stopwatch.StartNew();
             int max = Dict.Max();
             sw4.Stop();
 
@@ -166,42 +162,98 @@ namespace MyConcurrentDictionary
 
         private static void BuildTest()
         {
+            if (!String.IsNullOrEmpty(fileName))
+            {
+                if (!File.Exists(fileName))
+                {
+                    using (StreamWriter writer = new StreamWriter(fileName))
+                    {
+                        writer.WriteLine($"Thread Count:  1");
+                        writer.WriteLine($"String Length: {STRING_LENGTH}");
+                        writer.WriteLine($"Start Time: {DateTime.Now}");
+                        writer.WriteLine();
+                        writer.WriteLine();
+                        writer.WriteLine(",Builds,,,Deletes,,Run Time");
+                    }
+                }
+            }
+
             Console.WriteLine("===================================================================================");
             Console.WriteLine("================================ Build Test =======================================");
             Console.WriteLine("===================================================================================");
 
+            Stopwatch sw = Stopwatch.StartNew();
+
             List<Tuple<string, int>> list = BuildList();
-            Stopwatch sw = new Stopwatch();
-            sw.Start();
-            Dict = ConcurrentDictionary.Build(list);
-            sw.Stop();
+            Stopwatch sw1 = Stopwatch.StartNew();
+            using (Dict = ConcurrentDictionary.Build(list))
+            {
+                sw1.Stop();
 
-            Stopwatch sw2 = new Stopwatch();
-            sw2.Start();
-            int count = Dict.Size();
-            sw2.Stop();
 
-            Stopwatch sw3 = new Stopwatch();
-            sw3.Start();
-            int min = Dict.Min();
-            sw3.Stop();
+                for (int i = 0; i < 10; i++)
+                {
+                    // not found
+                    string scrambleStr = new string(chars.ToCharArray().OrderBy(x => Guid.NewGuid()).ToArray());
+                    Random rnd = new Random();
+                    string key = RandomString(scrambleStr, STRING_LENGTH, rnd);
+                    Stopwatch swDeletes = Stopwatch.StartNew();
+                    try
+                    {
+                        Dict.Delete(key);
+                    }
+                    catch (Exception)
+                    {
+                        // Delete throws an exception if the
+                        // key is not found. We are doing that
+                        // deliberately here, so we just
+                        // swallow the exception
+                    }
+                    swDeletes.Stop();
+                    deleteTimes.Add((double)swDeletes.ElapsedTicks / 10000000);
 
-            Stopwatch sw4 = new Stopwatch();
-            sw4.Start();
-            int max = Dict.Max();
-            sw4.Stop();
+                    // first
+                    key = Dict.SearchValue(true, false);
+                    swDeletes = Stopwatch.StartNew();
+                    Dict.Delete(key);
+                    swDeletes.Stop();
+                    deleteTimes.Add((double)swDeletes.ElapsedTicks / 10000000);
 
-            Console.WriteLine($"Threads:            1");
-            Console.WriteLine($"Build Time:         {TOTAL_INSERTS},         seconds: {(double)sw.ElapsedTicks / 10000000}");
-            Console.WriteLine($"Size:               {count},         seconds: {(double)sw2.ElapsedTicks / 10000000}");
-            Console.WriteLine($"Min:                {min},   seconds: {(double)sw3.ElapsedTicks / 10000000}");
-            Console.WriteLine($"Max:                {max},    seconds: {(double)sw4.ElapsedTicks / 10000000}");
-            Console.WriteLine();
-            Console.WriteLine();
+                    // last
+                    key = Dict.SearchValue(false, true);
+                    swDeletes = Stopwatch.StartNew();
+                    Dict.Delete(key);
+                    swDeletes.Stop();
+                    deleteTimes.Add((double)swDeletes.ElapsedTicks / 10000000);
 
-            Dict.Dispose();
+                    // middle
+                    key = Dict.SearchValue(false, false);
+                    swDeletes = Stopwatch.StartNew();
+                    Dict.Delete(key);
+                    swDeletes.Stop();
+                    deleteTimes.Add((double)swDeletes.ElapsedTicks / 10000000);
+                }
+
+                sw.Stop();
+                TimeSpan totalTime = new TimeSpan(sw.ElapsedTicks);
+                TimeSpan insertTime = new TimeSpan(sw1.ElapsedTicks);
+                double maxDelete = deleteTimes.Max();
+
+                Console.WriteLine($"Total Time:         {totalTime}");
+                Console.WriteLine($"Insert Time:        {insertTime.TotalSeconds}");
+                Console.WriteLine($"Max Delete seconds: {maxDelete}");
+                Console.WriteLine();
+                Console.WriteLine();
+
+                if (!String.IsNullOrEmpty(fileName))
+                {
+                    using (StreamWriter writer = File.AppendText(fileName))
+                    {
+                        writer.WriteLine($"{TOTAL_INSERTS},{insertTime.TotalSeconds},,{TOTAL_INSERTS},{maxDelete},,{totalTime}");
+                    }
+                }
+            }
             Dict = null;
-            count = 0;
         }
 
         private static string RandomString(string startString, int length, Random random)
@@ -212,32 +264,37 @@ namespace MyConcurrentDictionary
 
         private static void Insert()
         {
-            List<string> keys = new List<string>();
-            string scrambleStr = new string(chars.ToCharArray().OrderBy(x => Guid.NewGuid()).ToArray());
-            Random rnd = new Random();
-            for (int i = 0; i < LOOP_COUNT; i++)
+            try
             {
-                string key = RandomString(scrambleStr, STRING_LENGTH, rnd);
-                int val = rnd.Next(int.MinValue, int.MaxValue);
-                if (i % 20 == 0)
+                List<string> keys = new List<string>();
+                string scrambleStr = new string(chars.ToCharArray().OrderBy(x => Guid.NewGuid()).ToArray());
+                Random rnd = new Random();
+                for (int i = 0; i < LOOP_COUNT; i++)
                 {
-                    keys.Add(key);
+                    string key = RandomString(scrambleStr, STRING_LENGTH, rnd);
+                    int val = rnd.Next(int.MinValue, int.MaxValue);
+                    if (i % 20 == 0)
+                    {
+                        keys.Add(key);
+                    }
+
+                    Stopwatch sw = Stopwatch.StartNew();
+                    Dict.Insert(key, val);
+                    sw.Stop();
+                    insertTimes.Add((double)sw.ElapsedTicks / 10000000);
                 }
 
-                Stopwatch sw = new Stopwatch();
-                sw.Start();
-                Dict.Insert(key, val);
-                sw.Stop();
-                insertTimes.Add((double)sw.ElapsedTicks / 10000000);
+                foreach (string key in keys)
+                {
+                    Stopwatch sw = Stopwatch.StartNew();
+                    int val2 = Dict.Search(key);
+                    sw.Stop();
+                    searchTimes.Add((double)sw.ElapsedTicks / 10000000);
+                }
             }
-
-            foreach (string key in keys)
+            catch (Exception e)
             {
-                Stopwatch sw = new Stopwatch();
-                sw.Restart();
-                int val2 = Dict.Search(key);
-                sw.Stop();
-                searchTimes.Add((double)sw.ElapsedTicks / 10000000);
+                Console.WriteLine(e.ToString());
             }
         }
 
@@ -251,25 +308,6 @@ namespace MyConcurrentDictionary
                 list.Add(new Tuple<string, int>(RandomString(scrambleStr, STRING_LENGTH, rnd), rnd.Next(int.MinValue, int.MaxValue)));
             }
             return list;
-        }
-
-        private static void CreateFile()
-        {
-            if (!String.IsNullOrEmpty(fileName))
-            {
-                if (!File.Exists(fileName))
-                {
-                    using (StreamWriter sw = new StreamWriter(fileName))
-                    {
-                        sw.WriteLine($"Thread Count:  {THREAD_COUNT}");
-                        sw.WriteLine($"String Length: {STRING_LENGTH}");
-                        sw.WriteLine($"Start Time: {DateTime.Now}");
-                        sw.WriteLine();
-                        sw.WriteLine();
-                        sw.WriteLine(",Inserts,,,Search,,,Size,Min,Max,,Run Time");
-                    }
-                }
-            }
         }
     }
 }

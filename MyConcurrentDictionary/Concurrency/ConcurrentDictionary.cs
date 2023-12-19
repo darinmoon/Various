@@ -4,14 +4,16 @@ using System.Diagnostics;
 using System.Linq;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Concurrency
 {
     public class ConcurrentDictionary : IDisposable
     {
-        private const int DEFAULT_ARRAY_SIZE = 16384;
+        private const int DEFAULT_ARRAY_SIZE = 2048; //16384;
         private const int DEFAULT_LOCKS = 128;
+        private const int THREAD_COUNT = 10;
 
         private object[] _locks = new object[DEFAULT_LOCKS];
         private Bucket[] _buckets = null;
@@ -22,21 +24,6 @@ namespace Concurrency
         {
             _buckets = new Bucket[DEFAULT_ARRAY_SIZE];
             for (int i = 0; i < _buckets.Length; i++)
-            {
-                _buckets[i] = new Bucket();
-            }
-
-            for (int i = 0; i < _locks.Length; i++)
-            {
-                _locks[i] = new object();
-            }
-        }
-
-        public ConcurrentDictionary(int initialSize)
-        {
-            int arraySize = initialSize / 20;
-            _buckets = new Bucket[arraySize];
-            for(int i = 0; i < _buckets.Length; i++)
             {
                 _buckets[i] = new Bucket();
             }
@@ -61,26 +48,33 @@ namespace Concurrency
         public string SearchValue(bool first, bool last)
         {
             int fifth = _buckets.Length / 5;
+            var b = _buckets[fifth];
             Bucket bucket = _buckets[fifth];
+            while (bucket.FirstNode == null)
+            {
+                bucket = _buckets[++fifth];
+            }
+
             if (first)
             {
                 return bucket.FirstNode.Key;
             }
             else if (last)
             {
-                return bucket.Keys[bucket.Keys.Length - 1]; // GetEndBucket(bucket).Key;
+                return bucket.Keys[bucket.Keys.Length - 1];
             }
 
             int length = bucket.Keys.Length;
             int midPt = length / 2;
-            string key = bucket.Keys[midPt - 1];
+            string key = bucket.Keys[(midPt == 0) ? 0 : midPt - 1];
+
             return key;
         }
 
 
         public void Insert(string key, int value)
         {
-            Insert(key, value, true);
+            ThreadSafeInsert(key, value);
         }
 
         public void Delete(string key)
@@ -163,18 +157,48 @@ namespace Concurrency
             return min;
         }
 
+        public static List<List<Tuple<string, int>>> SplitList(List<Tuple<string, int>> kvPairs, int nSize)
+        {
+            var list = new List<List<Tuple<string, int>>>();
+
+            for (int i = 0; i < kvPairs.Count; i += nSize)
+            {
+                list.Add(kvPairs.GetRange(i, Math.Min(nSize, kvPairs.Count - i)));
+            }
+
+            return list;
+        }
+
         public static ConcurrentDictionary Build(List<Tuple<string, int>> input)
         {
-            ConcurrentDictionary dict = new ConcurrentDictionary(input.Count);
-
             if (input == null)
             {
                 throw new ArgumentNullException("input");
             }
 
-            foreach (var pair in input)
+            ConcurrentDictionary dict = new ConcurrentDictionary();
+
+            int threadListCnt = input.Count / THREAD_COUNT;
+            var lists = SplitList(input, threadListCnt);
+
+            Thread[] threads = new Thread[THREAD_COUNT];
+            for (int i = 0; i < threads.Length; i++)
             {
-                dict.Insert(pair.Item1, pair.Item2, false);
+                int idx = i;
+                threads[i] = new Thread(() => Insert(dict, lists[idx]));
+            }
+
+            for (int i = 0; i < threads.Length; i++)
+            {
+                threads[i].Start();
+            }
+
+            Console.WriteLine($"Threads:            {threads.Length}");
+            Console.WriteLine($"Total Inserts:      {input.Count}");
+
+            for (int i = 0; i < threads.Length; i++)
+            {
+                threads[i].Join();
             }
 
             return dict;
@@ -182,28 +206,36 @@ namespace Concurrency
 
         #region Private Methods
 
-        private void Insert(string key, int value, bool threadSafe)
+        private static void Insert(ConcurrentDictionary dict, List<Tuple<string, int>> input)
+        {
+            try
+            {
+                foreach (var pair in input)
+                {
+                    dict.ThreadSafeInsert(pair.Item1, pair.Item2);
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.ToString());
+            }
+        }
+
+        private void ThreadSafeInsert(string key, int value)
         {
             int hash = GetBucketHash(key);
             Node node = new Node(key, value);
 
-            if (threadSafe)
+            lock (_locks[GetLockHash(hash)])
             {
-                lock (_locks[GetLockHash(hash)])
-                {
-                    Insert(hash, node, true);
-                }
-            }
-            else
-            {
-                Insert(hash, node, true);
+                Insert(hash, node);
             }
         }
 
-        private void Insert(int hash, Node newNode, bool recalculate)
+        private void Insert(int hash, Node newNode)
         {
             Bucket bucket = _buckets[hash];
-            bucket.Insert(newNode, recalculate);
+            bucket.Insert(newNode);
         }
 
         private int GetBucketHash(string key)
@@ -214,61 +246,6 @@ namespace Concurrency
         private int GetLockHash(int bucketHash)
         {
             return bucketHash % _locks.Length;
-        }
-
-        private Node FindMidPointBucket(Node start, Node end, string key)
-        {
-            if (start == null && end == null)
-            {
-                throw new ArgumentNullException("start and end");
-            }
-            else if (start == null)
-            {
-                if (end.Key.CompareTo(key) == 0)
-                {
-                    return end;
-                }
-                return null;
-            }
-            else if (end == null)
-            {
-                if (start.Key.CompareTo(key) == 0)
-                {
-                    return start;
-                }
-                return null;
-            }
-
-            int length = GetBucketLength(start, end);
-            int midPt = length / 2;
-
-            Node midBucket = start;
-            for (int i = 0; i < midPt; i++)
-            {
-                midBucket = midBucket.NextNode;
-            }
-
-            int comp = midBucket.Key.CompareTo(key);
-            if (comp == 0)
-            {
-                return midBucket;
-            }
-            else if (comp < 0)
-            {
-                if (Node.ReferenceEquals(start, midBucket))
-                {
-                    return FindMidPointBucket(null, end, key);
-                }
-                return FindMidPointBucket(midBucket, end, key);
-            }
-            else
-            {
-                if (Node.ReferenceEquals(end, midBucket))
-                {
-                    return FindMidPointBucket(start, null, key);
-                }
-                return FindMidPointBucket(start, midBucket, key);
-            }
         }
 
         private int GetBucketLength(Node start, Node end)
