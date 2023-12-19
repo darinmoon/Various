@@ -1,33 +1,40 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Net.Sockets;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace Concurrency
 {
     public class ConcurrentDictionary : IDisposable
     {
-        private const int DEFAULT_ARRAY_SIZE = 2048; //16384;
+        #region Private Constants
+
+        private const int DEFAULT_ARRAY_SIZE = 16384;
         private const int DEFAULT_LOCKS = 128;
         private const int THREAD_COUNT = 10;
+
+        #endregion
+
+        #region Private Variables
 
         private object[] _locks = new object[DEFAULT_LOCKS];
         private Bucket[] _buckets = null;
         private IEqualityComparer<string> _comparer = EqualityComparer<string>.Default;
         private bool _disposed = false;
 
+        #endregion
+
+        #region Constructor and Finalizer
+
         public ConcurrentDictionary()
         {
+            // initialize the buckets
             _buckets = new Bucket[DEFAULT_ARRAY_SIZE];
             for (int i = 0; i < _buckets.Length; i++)
             {
                 _buckets[i] = new Bucket();
             }
 
+            // initialize the locks
             for (int i = 0; i < _locks.Length; i++)
             {
                 _locks[i] = new object();
@@ -39,12 +46,24 @@ namespace Concurrency
             Dispose(false);
         }
 
+        #endregion
+
+        #region IDisposable
+
         public void Dispose()
         {
             Dispose(true);
             GC.SuppressFinalize(this);
         }
 
+        #endregion
+
+        #region Public Methods
+
+        // This method is solely for testing purposes.
+        // It searches a bucket for either the first
+        // key, the last key, or a key in the middle
+        // to search for.
         public string SearchValue(bool first, bool last)
         {
             int fifth = _buckets.Length / 5;
@@ -70,7 +89,6 @@ namespace Concurrency
 
             return key;
         }
-
 
         public void Insert(string key, int value)
         {
@@ -157,18 +175,6 @@ namespace Concurrency
             return min;
         }
 
-        public static List<List<Tuple<string, int>>> SplitList(List<Tuple<string, int>> kvPairs, int nSize)
-        {
-            var list = new List<List<Tuple<string, int>>>();
-
-            for (int i = 0; i < kvPairs.Count; i += nSize)
-            {
-                list.Add(kvPairs.GetRange(i, Math.Min(nSize, kvPairs.Count - i)));
-            }
-
-            return list;
-        }
-
         public static ConcurrentDictionary Build(List<Tuple<string, int>> input)
         {
             if (input == null)
@@ -204,7 +210,24 @@ namespace Concurrency
             return dict;
         }
 
+        #endregion
+
         #region Private Methods
+
+        // Splits the list of tuples into multiple lists
+        // in order to multi-thread the insertions of the
+        // Build method
+        private static List<List<Tuple<string, int>>> SplitList(List<Tuple<string, int>> kvPairs, int nSize)
+        {
+            var list = new List<List<Tuple<string, int>>>();
+
+            for (int i = 0; i < kvPairs.Count; i += nSize)
+            {
+                list.Add(kvPairs.GetRange(i, Math.Min(nSize, kvPairs.Count - i)));
+            }
+
+            return list;
+        }
 
         private static void Insert(ConcurrentDictionary dict, List<Tuple<string, int>> input)
         {
@@ -246,32 +269,6 @@ namespace Concurrency
         private int GetLockHash(int bucketHash)
         {
             return bucketHash % _locks.Length;
-        }
-
-        private int GetBucketLength(Node start, Node end)
-        {
-            if (start == null)
-            {
-                throw new ArgumentNullException("start");
-            }
-            if (end == null)
-            {
-                throw new ArgumentNullException("end");
-            }
-
-            int length = 1;
-            Node bucket = start;
-            while (bucket != null && !Node.ReferenceEquals(bucket, end))
-            {
-                if (bucket.NextNode == null)
-                {
-                    break;
-                }
-                length++;
-                bucket = bucket.NextNode;
-            }
-
-            return length;
         }
 
         private void Dispose(bool disposing)

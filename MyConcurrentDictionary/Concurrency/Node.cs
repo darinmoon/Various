@@ -1,17 +1,18 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Net.Sockets;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace Concurrency
 {
     internal class Node : IDisposable
     {
-        public bool _disposed = false;
+        #region Private Variables
+
+        private bool _disposed = false;
+
+        #endregion
+
+        #region Public Properties
+
         public string Key { get; private set; }
         public int Value { get; set; }
         public Node NextNode { get; set; } = null;
@@ -28,6 +29,10 @@ namespace Concurrency
             }
         }
 
+        #endregion
+
+        #region Constructor and Finalizer
+
         public Node(string key, int value)
         {
             this.Key = key;
@@ -39,64 +44,19 @@ namespace Concurrency
             Dispose(false);
         }
 
+        #endregion
+
+        #region IDisposable
+
         public void Dispose()
         {
             Dispose(true);
             GC.SuppressFinalize(this);
         }
 
-        public Node Insert(Node bucket)
-        {
-            int comp = Key.CompareTo(bucket.Key);
-            if (comp == 0)
-            {
-                Value = bucket.Value;
-                return this;
-            }
-            else if (comp > 0)
-            {
-                bucket.NextNode = this;
-                return bucket;
-            }
-            else if (NextNode == null)
-            {
-                NextNode = bucket;
-            }
-            else
-            {
-                NextNode = NextNode.Insert(bucket);
-            }
-            return this;
-        }
+        #endregion
 
-        public Node Delete(string key)
-        {
-            int comp = Key.CompareTo(key);
-            if (comp == 0)
-            {
-                return NextNode;
-            }
-            else if (comp > 0 || NextNode == null)
-            {
-                throw new KeyNotFoundException(key);
-            }
-            NextNode = NextNode.Delete(key);
-            return this;
-        }
-
-        public int Search(string key)
-        {
-            int comp = Key.CompareTo(key);
-            if (comp == 0)
-            {
-                return Value;
-            }
-            else if (comp > 0 || NextNode == null)
-            {
-                throw new KeyNotFoundException(key);
-            }
-            return NextNode.Search(key);
-        }
+        #region Private Methods
 
         private void Dispose(bool disposing)
         {
@@ -114,5 +74,7 @@ namespace Concurrency
                 _disposed = true;
             }
         }
+
+        #endregion
     }
 }
