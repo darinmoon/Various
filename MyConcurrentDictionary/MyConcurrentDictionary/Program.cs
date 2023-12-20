@@ -29,6 +29,9 @@ namespace MyConcurrentDictionary
         private static ConcurrentBag<double> insertTimes = new ConcurrentBag<double>();
         private static ConcurrentBag<double> searchTimes = new ConcurrentBag<double>();
         private static ConcurrentBag<double> deleteTimes = new ConcurrentBag<double>();
+        private static ConcurrentBag<double> sizeTimes = new ConcurrentBag<double>();
+        private static ConcurrentBag<double> minTimes = new ConcurrentBag<double>();
+        private static ConcurrentBag<double> maxTimes = new ConcurrentBag<double>();
 
         #endregion
 
@@ -139,25 +142,31 @@ namespace MyConcurrentDictionary
                 threads[i].Join();
             }
 
-            // Test the size method
-            Stopwatch sw2 = Stopwatch.StartNew();
-            int count = Dict.Size();
-            sw2.Stop();
+            // Now test Size, Min, and Max
+            for (int i = 0; i < threads.Length; i++)
+            {
+                threads[i] = new Thread(new ThreadStart(TestSizeMinMax));
+            }
 
-            // test the min method
-            Stopwatch sw3 = Stopwatch.StartNew();
-            int min = Dict.Min();
-            sw3.Stop();
+            // start all of the threads
+            for (int i = 0; i < threads.Length; i++)
+            {
+                threads[i].Start();
+            }
 
-            // test the max method
-            Stopwatch sw4 = Stopwatch.StartNew();
-            int max = Dict.Max();
-            sw4.Stop();
+            // block until all of the threads are done
+            for (int i = 0; i < threads.Length; i++)
+            {
+                threads[i].Join();
+            }
 
             // gather and output the results
-            TimeSpan size = new TimeSpan(sw2.ElapsedTicks);
-            TimeSpan minTime = new TimeSpan(sw3.ElapsedTicks);
-            TimeSpan maxTime = new TimeSpan(sw4.ElapsedTicks);
+            int count = Dict.Size();
+            int min = Dict.Min();
+            int max = Dict.Max();
+            double sizeMax = sizeTimes.Max();
+            double minMax = minTimes.Max();
+            double maxMax = maxTimes.Max();
             double maxInsert = insertTimes.Max();
             double maxSearch = searchTimes.Max();
 
@@ -167,9 +176,9 @@ namespace MyConcurrentDictionary
             Console.WriteLine($"Total Time:         {totalTime}");
             Console.WriteLine($"Max Insert seconds: {maxInsert}");
             Console.WriteLine($"Max Search seconds: {maxSearch}");
-            Console.WriteLine($"Size:               {count},         seconds: {size.TotalSeconds}");
-            Console.WriteLine($"Min:                {min},   seconds: {minTime.TotalSeconds}");
-            Console.WriteLine($"Max:                {max},    seconds: {maxTime.TotalSeconds}");
+            Console.WriteLine($"Size:               {count},         seconds: {sizeMax}");
+            Console.WriteLine($"Min:                {min},   seconds: {minMax}");
+            Console.WriteLine($"Max:                {max},    seconds: {maxMax}");
             Console.WriteLine();
             Console.WriteLine();
 
@@ -177,7 +186,7 @@ namespace MyConcurrentDictionary
             {
                 using (StreamWriter writer = File.AppendText(fileName))
                 {
-                    writer.WriteLine($"{TOTAL_INSERTS},{maxInsert},,{TOTAL_INSERTS},{maxSearch},,{TOTAL_INSERTS},{size.TotalSeconds},{minTime.TotalSeconds},{maxTime.TotalSeconds},,{totalTime}");
+                    writer.WriteLine($"{TOTAL_INSERTS},{maxInsert},,{TOTAL_INSERTS},{maxSearch},,{TOTAL_INSERTS},{sizeMax},{minMax},{maxMax},,{totalTime}");
                 }
             }
         }
@@ -429,6 +438,7 @@ namespace MyConcurrentDictionary
         {
             try
             {
+                Stopwatch sw;
                 List<string> keys = new List<string>();
                 // we need to start each thread with a scrambled version of the CHARACTERS string
                 // from which to generate random strings so that we don't end up with a bunch of duplicates
@@ -447,7 +457,7 @@ namespace MyConcurrentDictionary
                     }
 
                     // Insert
-                    Stopwatch sw = Stopwatch.StartNew();
+                    sw = Stopwatch.StartNew();
                     Dict.Insert(key, val);
                     sw.Stop();
                     insertTimes.Add((double)sw.ElapsedTicks / 10000000);
@@ -457,7 +467,7 @@ namespace MyConcurrentDictionary
                 // strings saved previously
                 foreach (string key in keys)
                 {
-                    Stopwatch sw = Stopwatch.StartNew();
+                    sw = Stopwatch.StartNew();
                     int val2 = Dict.Search(key);
                     sw.Stop();
                     searchTimes.Add((double)sw.ElapsedTicks / 10000000);
@@ -466,6 +476,30 @@ namespace MyConcurrentDictionary
             catch (Exception e)
             {
                 Console.WriteLine(e.ToString());
+            }
+        }
+
+        private static void TestSizeMinMax()
+        {
+            for (int i = 0; i < 10; i++)
+            {
+                // Test the size method
+                Stopwatch sw = Stopwatch.StartNew();
+                int count = Dict.Size();
+                sw.Stop();
+                sizeTimes.Add((double)sw.ElapsedTicks / 10000000);
+
+                // test the min method
+                sw = Stopwatch.StartNew();
+                int min = Dict.Min();
+                sw.Stop();
+                minTimes.Add((double)sw.ElapsedTicks / 10000000);
+
+                // test the max method
+                sw = Stopwatch.StartNew();
+                int max = Dict.Max();
+                sw.Stop();
+                maxTimes.Add((double)sw.ElapsedTicks / 10000000);
             }
         }
 
