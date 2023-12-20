@@ -21,17 +21,7 @@ namespace Concurrency
 
         public string[] Keys { get; private set; } = null;
         public Node FirstNode { get; private set; } = null;
-        public int Length 
-        { 
-            get 
-            {
-                if (FirstNode == null)
-                {
-                    return 0;
-                }
-                return Nodes.Length; 
-            }
-        }
+        public int Length {  get { return (FirstNode == null) ? 0 : Nodes.Length; } }
         public int Min { get; private set; } = 0;
         public int Max { get; private set; } = 0;
 
@@ -146,13 +136,13 @@ namespace Concurrency
         {
             if (FirstNode == null)
             {
-                throw new KeyNotFoundException(key);
+                throw new KeyNotFoundException($"Key \"{key}\" could not be found in the dictionary");
             }
 
             int idx = Array.BinarySearch<string>(Keys, key);
             if (idx < 0)
             {
-                throw new KeyNotFoundException(key);
+                throw new KeyNotFoundException($"Key \"{key}\" could not be found in the dictionary");
             }
 
             return Nodes[idx].Value;

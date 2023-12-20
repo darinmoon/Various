@@ -14,7 +14,7 @@ namespace MyConcurrentDictionary
         #region Private Static Constants
 
         private static int THREAD_COUNT = 10;
-        private static int TOTAL_INSERTS = 3000000;
+        private static int TOTAL_INSERTS = 100000;
         private static int LOOP_COUNT = TOTAL_INSERTS / THREAD_COUNT;
         private static int STRING_LENGTH = 20;
         private static string CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz 0123456789";
@@ -216,49 +216,49 @@ namespace MyConcurrentDictionary
             {
                 sw1.Stop();
 
-                // loop to test different cases of the Delete method
-                for (int i = 0; i < 10; i++)
+                // we need lists of values to test deletions.
+                // the difficult is making sure each thread
+                // has different vaules for all 3 types of deletes
+                // (first in bucket, last in bucket, middle of bucket)
+                List<string>[] deleteFirstValues = new List<string>[THREAD_COUNT];
+                List<string>[] deleteLastValues = new List<string>[THREAD_COUNT];
+                List<string>[] deleteMiddleValues = new List<string>[THREAD_COUNT];
+
+                // initialize the threads array
+                Thread[] threads = new Thread[THREAD_COUNT];
+                for (int i = 0; i < threads.Length; i++)
                 {
-                    // not found
-                    string scrambleStr = new string(CHARACTERS.ToCharArray().OrderBy(x => Guid.NewGuid()).ToArray());
-                    Random rnd = new Random();
-                    string key = RandomString(scrambleStr, STRING_LENGTH, rnd);
-                    Stopwatch swDeletes = Stopwatch.StartNew();
-                    try
+                    // get lists of values to delete for each thread
+                    deleteFirstValues[i] = new List<string>();
+                    deleteLastValues[i] = new List<string>();
+                    deleteMiddleValues[i] = new List<string>();
+
+                    // Load values for the threads to delete
+                    // making sure that there are no duplicates
+                    // among any of the lists
+                    for (int j = 0; j < 10; j++)
                     {
-                        Dict.Delete(key);
+                        deleteFirstValues[i].Add(GetUniqueDictValue((j + i + 1) * 5, deleteFirstValues, deleteLastValues, deleteMiddleValues));
+                        deleteLastValues[i].Add(GetUniqueDictValue((j + i + 2) * 307, deleteFirstValues, deleteLastValues, deleteMiddleValues));
+                        deleteMiddleValues[i].Add(GetUniqueDictValue((j + i + 3) * 823, deleteFirstValues, deleteLastValues, deleteMiddleValues));
                     }
-                    catch (Exception)
-                    {
-                        // Delete throws an exception if the
-                        // key is not found. We are doing that
-                        // deliberately here, so we just
-                        // swallow the exception
-                    }
-                    swDeletes.Stop();
-                    deleteTimes.Add((double)swDeletes.ElapsedTicks / 10000000);
 
-                    // first
-                    key = Dict.SearchValue(true, false);
-                    swDeletes = Stopwatch.StartNew();
-                    Dict.Delete(key);
-                    swDeletes.Stop();
-                    deleteTimes.Add((double)swDeletes.ElapsedTicks / 10000000);
-
-                    // last
-                    key = Dict.SearchValue(false, true);
-                    swDeletes = Stopwatch.StartNew();
-                    Dict.Delete(key);
-                    swDeletes.Stop();
-                    deleteTimes.Add((double)swDeletes.ElapsedTicks / 10000000);
-
-                    // middle
-                    key = Dict.SearchValue(false, false);
-                    swDeletes = Stopwatch.StartNew();
-                    Dict.Delete(key);
-                    swDeletes.Stop();
-                    deleteTimes.Add((double)swDeletes.ElapsedTicks / 10000000);
+                    int idx = i;
+                    threads[i] = new Thread(() => TestDelete(deleteFirstValues[idx], deleteLastValues[idx], deleteMiddleValues[idx]));
                 }
+
+                // start all of the threads
+                for (int i = 0; i < threads.Length; i++)
+                {
+                    threads[i].Start();
+                }
+
+                // block until all of the threads are done
+                for (int i = 0; i < threads.Length; i++)
+                {
+                    threads[i].Join();
+                }
+
 
                 // gather and output the results
                 sw.Stop();
@@ -281,6 +281,140 @@ namespace MyConcurrentDictionary
                 }
             }
             Dict = null;
+        }
+
+        private static string GetUniqueDictValue(int idx, List<string>[] firsts, List<string>[] lasts, List<string>[] middles)
+        {
+            string val = null;
+            int i = 0;
+            bool duplicate = true;
+
+            while (duplicate)
+            {
+                // reset the flag and get a value
+                duplicate = false;
+                val = Dict.SearchValue(true, false, idx + i++);
+
+                // verify that the value isn't already in the "firsts" lists
+                for (int j = 0; j < firsts.Length; j++)
+                {
+                    var list = firsts[j];
+                    if (list != null)
+                    {
+                        foreach (string s in list)
+                        {
+                            if (s.CompareTo(val) == 0)
+                            {
+                                duplicate = true;
+                                break;
+                            }
+                        }
+                        if (duplicate)
+                        {
+                            continue;
+                        }
+                    }
+                }
+                // make sure the value isn't already in the "lasts" lists
+                for (int j = 0; j < lasts.Length; j++)
+                {
+                    var list = lasts[j];
+                    if (list != null)
+                    {
+                        foreach (string s in list)
+                        {
+                            if (s.CompareTo(val) == 0)
+                            {
+                                duplicate = true;
+                                break;
+                            }
+                        }
+                        if (duplicate)
+                        {
+                            continue;
+                        }
+                    }
+                }
+                // make sure the value isn't already in the "middles" lists
+                for (int j = 0; j < middles.Length; j++)
+                {
+                    var list = middles[j];
+                    if (list != null)
+                    {
+                        foreach (string s in list)
+                        {
+                            if (s.CompareTo(val) == 0)
+                            {
+                                duplicate = true;
+                                break;
+                            }
+                        }
+                        if (duplicate)
+                        {
+                            continue;
+                        }
+                    }
+                }
+            }
+            return val;
+        }
+
+        private static void TestDelete(List<string> firstValues, List<string> lastValues, List<string> middleValues)
+        {
+            // not found
+            string scrambleStr = new string(CHARACTERS.ToCharArray().OrderBy(x => Guid.NewGuid()).ToArray());
+            Random rnd = new Random();
+            Stopwatch swDeletes = null;
+
+            // loop to test different cases of the Delete method
+            for (int i = 0; i < 10; i++)
+            {
+                string key = RandomString(scrambleStr, STRING_LENGTH, rnd);
+                swDeletes = Stopwatch.StartNew();
+                try
+                {
+                    Dict.Delete(key);
+                }
+                catch (Exception)
+                {
+                    // Delete throws an exception if the
+                    // key is not found. We are doing that
+                    // deliberately here, so we just
+                    // swallow the exception
+                }
+                swDeletes.Stop();
+                deleteTimes.Add((double)swDeletes.ElapsedTicks / 10000000);
+            }
+
+            foreach (string key in firstValues)
+            {
+                // first
+                //key = Dict.SearchValue(true, false);
+                swDeletes = Stopwatch.StartNew();
+                Dict.Delete(key);
+                swDeletes.Stop();
+                deleteTimes.Add((double)swDeletes.ElapsedTicks / 10000000);
+            }
+
+            foreach (string key in lastValues)
+            {
+                // last
+                //key = Dict.SearchValue(false, true);
+                swDeletes = Stopwatch.StartNew();
+                Dict.Delete(key);
+                swDeletes.Stop();
+                deleteTimes.Add((double)swDeletes.ElapsedTicks / 10000000);
+            }
+
+            foreach (string key in middleValues)
+            {
+                // middle
+                //key = Dict.SearchValue(false, false);
+                swDeletes = Stopwatch.StartNew();
+                Dict.Delete(key);
+                swDeletes.Stop();
+                deleteTimes.Add((double)swDeletes.ElapsedTicks / 10000000);
+            }
         }
 
         // Generat a random string of the given length

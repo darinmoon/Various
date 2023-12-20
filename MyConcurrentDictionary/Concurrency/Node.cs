@@ -17,17 +17,7 @@ namespace Concurrency
         public int Value { get; set; }
         public Node NextNode { get; set; } = null;
 
-        public int Length
-        {
-            get
-            {
-                if (NextNode == null)
-                {
-                    return 1;
-                }
-                return 1 + NextNode.Length;
-            }
-        }
+        public int Length { get { return (NextNode == null) ? 1 : NextNode.Length + 1; } }
 
         #endregion
 

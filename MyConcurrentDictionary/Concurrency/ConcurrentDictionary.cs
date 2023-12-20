@@ -64,14 +64,17 @@ namespace Concurrency
         // It searches a bucket for either the first
         // key, the last key, or a key in the middle
         // to search for.
-        public string SearchValue(bool first, bool last)
+        public string SearchValue(bool first, bool last, int bucketIdx)
         {
-            int fifth = _buckets.Length / 5;
-            var b = _buckets[fifth];
-            Bucket bucket = _buckets[fifth];
+            while (bucketIdx > _buckets.Length - 1)
+            {
+                bucketIdx /= 2;
+            }
+
+            Bucket bucket = _buckets[bucketIdx];
             while (bucket.FirstNode == null)
             {
-                bucket = _buckets[++fifth];
+                bucket = _buckets[++bucketIdx];
             }
 
             if (first)
