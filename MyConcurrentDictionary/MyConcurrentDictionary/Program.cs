@@ -481,25 +481,32 @@ namespace MyConcurrentDictionary
 
         private static void TestSizeMinMax()
         {
-            for (int i = 0; i < 10; i++)
+            try
             {
-                // Test the size method
-                Stopwatch sw = Stopwatch.StartNew();
-                int count = Dict.Size();
-                sw.Stop();
-                sizeTimes.Add((double)sw.ElapsedTicks / 10000000);
+                for (int i = 0; i < 10; i++)
+                {
+                    // Test the size method
+                    Stopwatch sw = Stopwatch.StartNew();
+                    int count = Dict.Size();
+                    sw.Stop();
+                    sizeTimes.Add((double)sw.ElapsedTicks / 10000000);
 
-                // test the min method
-                sw = Stopwatch.StartNew();
-                int min = Dict.Min();
-                sw.Stop();
-                minTimes.Add((double)sw.ElapsedTicks / 10000000);
+                    // test the min method
+                    sw = Stopwatch.StartNew();
+                    int min = Dict.Min();
+                    sw.Stop();
+                    minTimes.Add((double)sw.ElapsedTicks / 10000000);
 
-                // test the max method
-                sw = Stopwatch.StartNew();
-                int max = Dict.Max();
-                sw.Stop();
-                maxTimes.Add((double)sw.ElapsedTicks / 10000000);
+                    // test the max method
+                    sw = Stopwatch.StartNew();
+                    int max = Dict.Max();
+                    sw.Stop();
+                    maxTimes.Add((double)sw.ElapsedTicks / 10000000);
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.ToString());
             }
         }
 

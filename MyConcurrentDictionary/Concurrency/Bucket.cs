@@ -20,10 +20,9 @@ namespace Concurrency
         #region Public Properties
 
         public string[] Keys { get; private set; } = null;
-        public Node FirstNode { get; private set; } = null;
-        public int Length {  get { return (FirstNode == null) ? 0 : Nodes.Length; } }
-        public int Min { get; private set; } = 0;
-        public int Max { get; private set; } = 0;
+        public int Length { get { return (Nodes == null) ? 0 : Nodes.Length; } }
+        public int Min { get; private set; }
+        public int Max { get; private set; }
 
         #endregion
 
@@ -51,10 +50,9 @@ namespace Concurrency
         // Insert a node in the correct position
         public void Insert(Node newNode)
         {
-            Node start = FirstNode;
-            if (start == null)
+            if (Nodes == null || Nodes.Length == 0 || Nodes[0] == null)
             {
-                FirstNode = newNode;
+                Nodes = new Node[1] { newNode };
             }
             else
             {
@@ -66,6 +64,8 @@ namespace Concurrency
                 }
                 else
                 {
+                    Node[] tempNodes = new Node[Nodes.Length + 1];
+
                     // if the key is not currently in the array of keys,
                     // then the BinarySearch method returns the negative
                     // value of (the insertion point + 1)
@@ -73,23 +73,19 @@ namespace Concurrency
                     // 1 to the negative value and then get the absolute value
                     int insertIdx = Math.Abs(idx + 1);
 
-                    if (insertIdx == 0)
+                    int j = 0;
+                    for (int i = 0; i < tempNodes.Length; i++)
                     {
-                        // the new node goes at the head of the list
-                        newNode.NextNode = FirstNode;
-                        FirstNode = newNode;
+                        if (i == insertIdx)
+                        {
+                            tempNodes[i] = newNode;
+                        }
+                        else
+                        {
+                            tempNodes[i] = Nodes[j++];
+                        }
                     }
-                    else if (insertIdx == Keys.Length)
-                    {
-                        // the new node goes at the end of the list
-                        Nodes[Nodes.Length - 1].NextNode = newNode;
-                    }
-                    else
-                    {
-                        // the new node goes somewhere in the middle
-                        Nodes[insertIdx - 1].NextNode = newNode;
-                        newNode.NextNode = Nodes[insertIdx];
-                    }
+                    Nodes = tempNodes;
                 }
             }
 
@@ -107,24 +103,17 @@ namespace Concurrency
                 throw new KeyNotFoundException($"Key \"{key}\" could not be found in the dictionary");
             }
 
-            if (idx == 0)
+            Node[] tempNodes = new Node[Nodes.Length - 1];
+            // delete the node
+            int j = 0;
+            for (int i = 0; i < Nodes.Length; i++)
             {
-                // delete the first Node
-                Node node = FirstNode.NextNode;
-                FirstNode.NextNode = null;
-                FirstNode.Dispose();
-                FirstNode = node;
+                if (i != idx)
+                {
+                    tempNodes[j++] = Nodes[i];
+                }
             }
-            else
-            {
-                // delete the node anywhere
-                // but the head
-                Node node = Nodes[idx];
-                Nodes[idx - 1].NextNode = node.NextNode;
-                node.NextNode = null;
-                node.Dispose();
-                node = null;
-            }
+            Nodes = tempNodes;
 
             // recalculate all of the values that
             // make inserting, searching, or getting
@@ -134,7 +123,7 @@ namespace Concurrency
 
         public int Search(string key)
         {
-            if (FirstNode == null)
+            if (Nodes == null || Nodes.Length == 0 || Nodes[0] == null)
             {
                 throw new KeyNotFoundException($"Key \"{key}\" could not be found in the dictionary");
             }
@@ -150,62 +139,13 @@ namespace Concurrency
 
         #endregion
 
-        #region Private Methods
+        #region Protected Methods
 
-        // recalculate all of the values that
-        // make inserting, searching, or getting
-        // size, min, or max fast
-        private void Recalculate()
-        {
-            if (FirstNode != null)
-            {
-                // Recalculate the length of the bucket
-                int length = FirstNode.Length;
-
-                // Reset the Node and Keys arrays
-                Nodes = new Node[length];
-                Keys = new string[length];
-
-                // initialize min and max
-                Min = FirstNode.Value;
-                Max = FirstNode.Value;
-                int i = 0;
-                Node node = FirstNode;
-
-                while (node != null)
-                {
-                    if (node.Value < Min)
-                    {
-                        // new min value
-                        Min = node.Value;
-                    }
-                    if (node.Value > Max)
-                    {
-                        // new max value
-                        Max = node.Value;
-                    }
-                    // load the arrays
-                    Nodes[i] = node;
-                    Keys[i] = node.Key;
-
-                    i++;
-                    node = node.NextNode;
-                }
-            }
-            else
-            {
-                Nodes = null;
-                Keys = null;
-                Min = 0;
-                Max = 0;
-            }
-        }
-
-        private void Dispose(bool disposing)
+        protected virtual void Dispose(bool disposing)
         {
             if (!_disposed)
             {
-                if (disposing) 
+                if (disposing)
                 {
                     if (Nodes != null)
                     {
@@ -218,14 +158,52 @@ namespace Concurrency
                         Nodes = null;
                         Keys = null;
                     }
-
-                    if (FirstNode != null)
-                    {
-                        FirstNode.Dispose();
-                        FirstNode = null;
-                    }
                 }
                 _disposed = true;
+            }
+        }
+
+        #endregion
+
+        #region Private Methods
+
+        // recalculate all of the values that
+        // make inserting, searching, or getting
+        // size, min, or max fast
+        private void Recalculate()
+        {
+            if (Nodes != null && Nodes.Length > 0 && Nodes[0] != null)
+            {
+                // Reset the Node and Keys arrays
+                Keys = new string[Nodes.Length];
+
+                // initialize min and max
+                Min = 0;
+                Max = 0;
+
+                for (int i = 0; i < Keys.Length; i++)
+                {
+                    Node node = Nodes[i];
+                    if (node.Value < Min)
+                    {
+                        // new min value
+                        Min = node.Value;
+                    }
+                    if (node.Value > Max)
+                    {
+                        // new max value
+                        Max = node.Value;
+                    }
+                    // load the arrays
+                    Keys[i] = node.Key;
+                }
+            }
+            else
+            {
+                Nodes = null;
+                Keys = null;
+                Min = 0;
+                Max = 0;
             }
         }
 
