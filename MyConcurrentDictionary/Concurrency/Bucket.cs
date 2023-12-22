@@ -178,8 +178,8 @@ namespace Concurrency
                 Keys = new string[Nodes.Length];
 
                 // initialize min and max
-                Min = 0;
-                Max = 0;
+                Min = Int32.MaxValue;
+                Max = Int32.MinValue;
 
                 for (int i = 0; i < Keys.Length; i++)
                 {
@@ -194,16 +194,15 @@ namespace Concurrency
                         // new max value
                         Max = node.Value;
                     }
-                    // load the arrays
+                    // load the keys array
                     Keys[i] = node.Key;
                 }
             }
             else
             {
-                Nodes = null;
                 Keys = null;
-                Min = 0;
-                Max = 0;
+                Min = Int32.MaxValue;
+                Max = Int32.MinValue;
             }
         }
 
