@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 
 namespace Concurrency
@@ -9,7 +8,7 @@ namespace Concurrency
     {
         #region Private Constants
 
-        private const int DEFAULT_ARRAY_SIZE = 2048;
+        private const int DEFAULT_ARRAY_SIZE = 16384;
         private const int DEFAULT_LOCKS = 128;
         private const int THREAD_COUNT = 10;
 
@@ -18,7 +17,7 @@ namespace Concurrency
         #region Private Variables
 
         private object[] _locks = new object[DEFAULT_LOCKS];
-        private TopLevelBucket[] _buckets = null;
+        private Bucket[] _buckets = null;
         private IEqualityComparer<string> _comparer = EqualityComparer<string>.Default;
         private bool _disposed = false;
 
@@ -29,10 +28,10 @@ namespace Concurrency
         public ConcurrentDictionary()
         {
             // initialize the buckets
-            _buckets = new TopLevelBucket[DEFAULT_ARRAY_SIZE];
+            _buckets = new Bucket[DEFAULT_ARRAY_SIZE];
             for (int i = 0; i < _buckets.Length; i++)
             {
-                _buckets[i] = new TopLevelBucket(DEFAULT_ARRAY_SIZE / 4);
+                _buckets[i] = new Bucket();
             }
 
             // initialize the locks
@@ -72,13 +71,26 @@ namespace Concurrency
                 bucketIdx /= 2;
             }
 
-            TopLevelBucket bucket = _buckets[bucketIdx];
-            while (bucket.Length() == 0)
+            Bucket bucket = _buckets[bucketIdx];
+            while (bucket.Length == 0)
             {
                 bucket = _buckets[++bucketIdx];
             }
 
-            return bucket.SearchValue(first, last);
+            if (first)
+            {
+                return bucket.Keys[0];
+            }
+            else if (last)
+            {
+                return bucket.Keys[bucket.Keys.Length - 1];
+            }
+
+            int length = bucket.Keys.Length;
+            int midPt = length / 2;
+            string key = bucket.Keys[(midPt == 0) ? 0 : midPt - 1];
+
+            return key;
         }
 
         public void Insert(string key, int value)
@@ -91,8 +103,8 @@ namespace Concurrency
             int hash = GetBucketHash(key);
             lock (_locks[GetLockHash(hash)])
             {
-                TopLevelBucket bucket = _buckets[hash];
-                if (bucket.Length() == 0)
+                Bucket bucket = _buckets[hash];
+                if (bucket.Length == 0)
                 {
                     throw new KeyNotFoundException(key);
                 }
@@ -116,10 +128,10 @@ namespace Concurrency
             {
                 lock (_locks[GetLockHash(i)])
                 {
-                    TopLevelBucket bucket = _buckets[i];
+                    Bucket bucket = _buckets[i];
                     if (bucket != null)
                     {
-                        size += bucket.Length();
+                        size += bucket.Length;
                     }
                 }
             }
@@ -133,10 +145,10 @@ namespace Concurrency
             {
                 lock (_locks[GetLockHash(i)])
                 {
-                    TopLevelBucket bucket = _buckets[i];
-                    if (bucket.Length() > 0)
+                    Bucket bucket = _buckets[i];
+                    if (bucket.Length > 0)
                     {
-                        int newMax = bucket.Max();
+                        int newMax = bucket.Max;
                         if (newMax > max)
                         {
                             max = newMax;
@@ -154,10 +166,10 @@ namespace Concurrency
             {
                 lock (_locks[GetLockHash(i)])
                 {
-                    TopLevelBucket bucket = _buckets[i];
-                    if (bucket.Length() > 0)
+                    Bucket bucket = _buckets[i];
+                    if (bucket.Length > 0)
                     {
-                        int newMin = bucket.Min();
+                        int newMin = bucket.Min;
                         if (newMin < min)
                         {
                             min = newMin;
@@ -250,7 +262,7 @@ namespace Concurrency
 
         private void Insert(int hash, Node newNode)
         {
-            TopLevelBucket bucket = _buckets[hash];
+            Bucket bucket = _buckets[hash];
             bucket.Insert(newNode);
         }
 
@@ -264,7 +276,11 @@ namespace Concurrency
             return bucketHash % _locks.Length;
         }
 
-        private void Dispose(bool disposing)
+        #endregion
+
+        #region Protected Methods
+
+        protected virtual void Dispose(bool disposing)
         {
             if (!_disposed)
             {
@@ -276,7 +292,7 @@ namespace Concurrency
                     {
                         for (int i = 0; i < _buckets.Length; i++)
                         {
-                            TopLevelBucket bucket = _buckets[i];
+                            Bucket bucket = _buckets[i];
                             if (bucket != null)
                             {
                                 bucket.Dispose();
