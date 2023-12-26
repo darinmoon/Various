@@ -19,6 +19,8 @@ namespace MyConcurrentDictionary
         private static int STRING_LENGTH = 20;
         private static string CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz 0123456789";
 
+        private static ManualResetEvent mre = new ManualResetEvent(false);
+
         #endregion
 
         #region Private Static Variables
@@ -26,12 +28,12 @@ namespace MyConcurrentDictionary
         private static string fileName = string.Empty;
         private static ConcurrentDictionary Dict = null;
 
-        private static ConcurrentBag<double> insertTimes = new ConcurrentBag<double>();
-        private static ConcurrentBag<double> searchTimes = new ConcurrentBag<double>();
-        private static ConcurrentBag<double> deleteTimes = new ConcurrentBag<double>();
-        private static ConcurrentBag<double> sizeTimes = new ConcurrentBag<double>();
-        private static ConcurrentBag<double> minTimes = new ConcurrentBag<double>();
-        private static ConcurrentBag<double> maxTimes = new ConcurrentBag<double>();
+        private static ConcurrentBag<double> insertTimes = null;
+        private static ConcurrentBag<double> searchTimes = null;
+        private static ConcurrentBag<double> deleteTimes = null;
+        private static ConcurrentBag<double> sizeTimes = null;
+        private static ConcurrentBag<double> minTimes = null;
+        private static ConcurrentBag<double> maxTimes = null;
 
         #endregion
 
@@ -70,6 +72,7 @@ namespace MyConcurrentDictionary
 
             try
             {
+                //TestMemoryLeak(bInserts);
                 if (bInserts)
                 {
                     // Test the inserts, searchs, size, min, and max
@@ -95,8 +98,41 @@ namespace MyConcurrentDictionary
 
         #region Private Methods
 
+        private static void CreateNewTimeContainers()
+        {
+            insertTimes = new ConcurrentBag<double>();
+            searchTimes = new ConcurrentBag<double>();
+            deleteTimes = new ConcurrentBag<double>();
+            sizeTimes = new ConcurrentBag<double>();
+            minTimes = new ConcurrentBag<double>();
+            maxTimes = new ConcurrentBag<double>();
+        }
+
+        private static void TestMemoryLeak(bool bInserts)
+        {
+            for (int i = 0; i <= 2000; i++) 
+            {
+                if (bInserts)
+                {
+                    // Test the inserts, searchs, size, min, and max
+                    using (Dict = new Concurrency.ConcurrentDictionary())
+                    {
+                        InsertTest();
+                    }
+                    Dict = null;
+                }
+                else
+                {
+                    // Test the builds and deletes
+                    BuildTest();
+                }
+            }
+        }
+
         private static void InsertTest()
         {
+            CreateNewTimeContainers();
+
             // write the test header to the file
             if (!String.IsNullOrEmpty(fileName))
             {
@@ -134,7 +170,10 @@ namespace MyConcurrentDictionary
             }
 
             Console.WriteLine($"Threads:            {threads.Length}");
-            Console.WriteLine($"Total Inserts:      {TOTAL_INSERTS}");
+            Console.WriteLine($"Total Inserts:      {TOTAL_INSERTS:n0}");
+
+            Thread sizeThread = new Thread(new ThreadStart(PrintSize));
+            sizeThread.Start();
 
             // block until all of the threads are done
             for (int i = 0; i < threads.Length; i++)
@@ -160,6 +199,9 @@ namespace MyConcurrentDictionary
                 threads[i].Join();
             }
 
+            mre.Set();
+            sizeThread.Join();
+
             // gather and output the results
             int count = Dict.Size();
             int min = Dict.Min();
@@ -176,9 +218,9 @@ namespace MyConcurrentDictionary
             Console.WriteLine($"Total Time:         {totalTime}");
             Console.WriteLine($"Max Insert seconds: {maxInsert}");
             Console.WriteLine($"Max Search seconds: {maxSearch}");
-            Console.WriteLine($"Size:               {count},         seconds: {sizeMax}");
-            Console.WriteLine($"Min:                {min},   seconds: {minMax}");
-            Console.WriteLine($"Max:                {max},    seconds: {maxMax}");
+            Console.WriteLine($"Size:               {count:n0},         seconds: {sizeMax}");
+            Console.WriteLine($"Min:                {min:n0},   seconds: {minMax}");
+            Console.WriteLine($"Max:                {max:n0},    seconds: {maxMax}");
             Console.WriteLine();
             Console.WriteLine();
 
@@ -191,8 +233,24 @@ namespace MyConcurrentDictionary
             }
         }
 
+        private static void PrintSize()
+        {
+            Console.WriteLine($"Current Size: {Dict.Size():n0}");
+            Stopwatch sw = Stopwatch.StartNew();
+            while (!mre.WaitOne(500))
+            {
+                if (sw.ElapsedMilliseconds > 60000)
+                {
+                    Console.WriteLine($"Current Size: {Dict.Size():n0}");
+                    sw.Restart();
+                }
+            }
+        }
+
         private static void BuildTest()
         {
+            CreateNewTimeContainers();
+
             // write the test header to the file
             if (!String.IsNullOrEmpty(fileName))
             {
@@ -426,7 +484,7 @@ namespace MyConcurrentDictionary
             }
         }
 
-        // Generat a random string of the given length
+        // Generate a random string of the given length
         private static string RandomString(string startString, int length, Random random)
         {
             return new string(Enumerable.Repeat(startString, length)
