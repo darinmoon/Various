@@ -8,7 +8,7 @@ namespace Concurrency
     {
         #region Private Constants
 
-        private const int DEFAULT_ARRAY_SIZE = 16384;
+        private const int DEFAULT_ARRAY_SIZE = 16411;
         private const int DEFAULT_LOCKS = 128;
         private const int THREAD_COUNT = 10;
 
@@ -205,7 +205,7 @@ namespace Concurrency
             }
 
             Console.WriteLine($"Threads:            {threads.Length}");
-            Console.WriteLine($"Total Inserts:      {input.Count}");
+            Console.WriteLine($"Total Inserts:      {input.Count:n0}");
 
             for (int i = 0; i < threads.Length; i++)
             {
