@@ -11,18 +11,12 @@ namespace Concurrency
 
         #endregion
 
-        #region Private Properties
-
-        private Node[] Nodes { get; set; } = null;
-
-        #endregion
-
         #region Public Properties
 
-        public string[] Keys { get; private set; } = null;
-        public int Length { get { return (Nodes == null) ? 0 : Nodes.Length; } }
-        public int Min { get; private set; }
-        public int Max { get; private set; }
+        public Node Head { get; private set; } = null;
+        public int Length { get; private set; } = 0;
+        public int Min { get; private set; } = Int32.MaxValue;
+        public int Max { get; private set; } = Int32.MinValue;
 
         #endregion
 
@@ -47,94 +41,121 @@ namespace Concurrency
 
         #region Public Methods
 
+        public Node GetTail()
+        {
+            Node node = Head;
+            if (node == null)
+            {
+                return null;
+            }
+            while (node.NextNode != null)
+            {
+                node = node.NextNode;
+            }
+
+            return node;
+        }
+
         // Insert a node in the correct position
         public void Insert(Node newNode)
         {
-            if (Nodes == null || Nodes.Length == 0 || Nodes[0] == null)
+            if (Head == null)
             {
-                Nodes = new Node[1] { newNode };
+                Head = newNode;
             }
             else
             {
-                int idx = BinarySearch(Keys, newNode.Key);
-                if (idx >= 0)
-                {
-                    // the key already exists, so just overwrite the value
-                    Nodes[idx].Value = newNode.Value;
-                }
-                else
-                {
-                    Node[] tempNodes = new Node[Nodes.Length + 1];
-
-                    // if the key is not currently in the array of keys,
-                    // then the BinarySearch method returns the negative
-                    // value of (the insertion point + 1)
-                    // to get the correct insertion point, we have to add
-                    // 1 to the negative value and then get the absolute value
-                    int insertIdx = Math.Abs(idx + 1);
-
-                    int j = 0;
-                    for (int i = 0; i < tempNodes.Length; i++)
-                    {
-                        if (i == insertIdx)
-                        {
-                            tempNodes[i] = newNode;
-                        }
-                        else
-                        {
-                            tempNodes[i] = Nodes[j++];
-                        }
-                    }
-                    Nodes = tempNodes;
-                }
+                newNode.NextNode = Head;
+                Head = newNode;
             }
 
-            // recalculate all of the values that
-            // make inserting, searching, or getting
-            // size, min, or max fast
-            Recalculate();
+            Length = 0;
+            Min = Int32.MaxValue;
+            Max = Int32.MinValue;
+            Node node = Head;
+            while (node != null)
+            {
+                Length++;
+                if (node.Value < Min)
+                {
+                    Min = node.Value;
+                }
+                if (node.Value > Max)
+                {
+                    Max = node.Value;
+                }
+                node = node.NextNode;
+            }
         }
 
         public void Delete(string key)
         {
-            int idx = Array.BinarySearch<string>(Keys, key);
-            if (idx < 0)
+            if (Head == null)
             {
                 throw new KeyNotFoundException($"Key \"{key}\" could not be found in the dictionary");
             }
 
-            Node[] tempNodes = new Node[Nodes.Length - 1];
-            // delete the node
-            int j = 0;
-            for (int i = 0; i < Nodes.Length; i++)
+            Node prevNode = null;
+            Node node = Head;
+            while (node != null)
             {
-                if (i != idx)
+                if (key.Equals(node.Key))
                 {
-                    tempNodes[j++] = Nodes[i];
-                }
-            }
-            Nodes = tempNodes;
+                    if (prevNode == null)
+                    {
+                        Head = node.NextNode;
+                        node.NextNode = null;
+                    }
+                    else
+                    {
+                        prevNode.NextNode = node.NextNode;
+                        node.NextNode = null;
+                    }
 
-            // recalculate all of the values that
-            // make inserting, searching, or getting
-            // size, min, or max fast
-            Recalculate();
+                    Length = 0;
+                    Min = Int32.MaxValue;
+                    Max = Int32.MinValue;
+                    Node tempNode = Head;
+                    while (tempNode != null)
+                    {
+                        Length++;
+                        if (tempNode.Value < Min)
+                        {
+                            Min = tempNode.Value;
+                        }
+                        if (tempNode.Value > Max)
+                        {
+                            Max = tempNode.Value;
+                        }
+                        tempNode = tempNode.NextNode;
+                    }
+
+
+                    return;
+                }
+                prevNode = node;
+                node = node.NextNode;
+            }
+            throw new KeyNotFoundException($"Key \"{key}\" could not be found in the dictionary");
         }
 
         public int Search(string key)
         {
-            if (Nodes == null || Nodes.Length == 0 || Nodes[0] == null)
+            if (Head == null)
             {
                 throw new KeyNotFoundException($"Key \"{key}\" could not be found in the dictionary");
             }
 
-            int idx = Array.BinarySearch<string>(Keys, key);
-            if (idx < 0)
+            Node node = Head;
+            while (node != null) 
             {
-                throw new KeyNotFoundException($"Key \"{key}\" could not be found in the dictionary");
+                if (key.Equals(node.Key))
+                {
+                    return node.Value;
+                }
+                node = node.NextNode;
             }
-
-            return Nodes[idx].Value;
+            throw new KeyNotFoundException($"Key \"{key}\" could not be found in the dictionary");
         }
 
         #endregion
@@ -147,16 +168,12 @@ namespace Concurrency
             {
                 if (disposing)
                 {
-                    if (Nodes != null)
+                    Node node = Head;
+                    while (node != null)
                     {
-                        for (int i = 0; i < Nodes.Length; i++)
-                        {
-                            Nodes[i] = null;
-                            Keys[i] = null;
-                        }
-
-                        Nodes = null;
-                        Keys = null;
+                        Node tempNode = node.NextNode;
+                        node.NextNode = null;
+                        node = tempNode;
                     }
                 }
                 _disposed = true;
@@ -165,82 +182,5 @@ namespace Concurrency
 
         #endregion
 
-        #region Private Methods
-
-        // recalculate all of the values that
-        // make inserting, searching, or getting
-        // size, min, or max fast
-        private void Recalculate()
-        {
-            if (Nodes != null && Nodes.Length > 0 && Nodes[0] != null)
-            {
-                // Reset the Node and Keys arrays
-                Keys = new string[Nodes.Length];
-
-                // initialize min and max
-                Min = Int32.MaxValue;
-                Max = Int32.MinValue;
-
-                for (int i = 0; i < Keys.Length; i++)
-                {
-                    Node node = Nodes[i];
-                    if (node.Value < Min)
-                    {
-                        // new min value
-                        Min = node.Value;
-                    }
-                    if (node.Value > Max)
-                    {
-                        // new max value
-                        Max = node.Value;
-                    }
-                    // load the keys array
-                    Keys[i] = node.Key;
-                }
-            }
-            else
-            {
-                Keys = null;
-                Min = Int32.MaxValue;
-                Max = Int32.MinValue;
-            }
-        }
-
-        // Binary search that will give us the index of the matching
-        // entry in the array or, if it is not founnd, gives us a
-        // negative value that indicates the potential insertion point
-        private static int BinarySearch(string[] a, string key)
-        {
-            return BinarySearch(a, 0, a.Length, key);
-        }
-
-        // Binary search that will give us the index of the matching
-        // entry in the array or, if it is not founnd, gives us a
-        // negative value that indicates the potential insertion point
-        private static int BinarySearch(string[] a, int fromIndex, int toIndex, string key)
-        {
-            int low = fromIndex;
-            int high = toIndex - 1;
-
-            while (low <= high)
-            {
-                // get the mid point
-                int mid = (int)((uint)(low + high) >> 1);
-                string midVal = a[mid];
-
-                // does it match, if not,
-                // which section do we search next?
-                int comp = midVal.CompareTo(key);
-                if (comp < 0)
-                    low = mid + 1;
-                else if (comp > 0)
-                    high = mid - 1;
-                else
-                    return mid; // key found
-            }
-            return -(low + 1);  // key not found.
-        }
-
-        #endregion
     }
 }

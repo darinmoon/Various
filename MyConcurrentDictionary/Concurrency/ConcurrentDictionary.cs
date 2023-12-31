@@ -9,7 +9,7 @@ namespace Concurrency
         #region Private Constants
 
         private const int DEFAULT_ARRAY_SIZE = 16411;
-        private const int DEFAULT_LOCKS = 128;
+        private const int DEFAULT_LOCKS = 127;
         private const int THREAD_COUNT = 10;
 
         #endregion
@@ -79,16 +79,21 @@ namespace Concurrency
 
             if (first)
             {
-                return bucket.Keys[0];
+                return bucket.Head.Key;
             }
             else if (last)
             {
-                return bucket.Keys[bucket.Keys.Length - 1];
+                return bucket.GetTail().Key;
             }
 
-            int length = bucket.Keys.Length;
+            int length = bucket.Length;
             int midPt = length / 2;
-            string key = bucket.Keys[(midPt == 0) ? 0 : midPt - 1];
+            Node node = bucket.Head;
+            for (int i = 0; i < midPt; i++)
+            {
+                node = node.NextNode;
+            }
+            string key = node.Key;
 
             return key;
         }
